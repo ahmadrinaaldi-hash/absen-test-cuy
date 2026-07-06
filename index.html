@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0f2647">
+<title>Mesin Absensi — BPBD Provinsi Kalimantan Selatan</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  html,body{overflow-x:hidden;}
+  input,select,textarea{font-size:16px;} /* cegah auto-zoom di Safari iOS saat fokus input */
+
+  .clock{text-align:center;font-size:38px;font-weight:800;color:var(--navy);margin:6px 0 0;}
+  .date{text-align:center;color:var(--muted);font-size:13px;margin-bottom:18px;}
+
+  .foto-preview-wrap{margin-top:12px;text-align:center;}
+  .foto-preview{
+    width:100%;max-width:280px;aspect-ratio:4/3;object-fit:cover;
+    border-radius:14px;border:1px solid var(--border);
+  }
+
+  .lokasi-box{margin-top:12px;background:#f6f8fb;border-radius:12px;padding:12px 14px;}
+  .lokasi-info{font-size:12px;color:var(--muted);margin-bottom:8px;}
+  .lokasi-map{width:100%;height:140px;border:0;border-radius:10px;display:none;}
+  .lokasi-link{display:inline-block;margin-top:8px;font-size:12px;color:var(--navy);font-weight:700;text-decoration:none;}
+
+  .profile-box{
+    display:flex;gap:14px;align-items:center;
+    background:#f6f8fb;border-radius:12px;padding:14px 16px;margin-top:16px;
+  }
+  .profile-box img{width:56px;height:56px;border-radius:10px;object-fit:cover;background:#dfe5ec;}
+  .profile-box .meta strong{display:block;color:var(--navy);font-size:15px;}
+  .profile-box .meta span{color:var(--muted);font-size:12px;}
+
+  .action-row{display:flex;gap:12px;margin-top:16px;}
+  .action-row .btn{flex:1;padding:16px;font-size:15px;}
+
+  .status-msg{text-align:center;font-size:13px;margin-top:12px;min-height:18px;}
+  .status-ok{color:var(--green);font-weight:700;}
+  .status-err{color:var(--red);font-weight:700;}
+
+  .link-admin{
+    display:block;text-align:center;margin-top:22px;color:var(--muted);font-size:12px;
+    text-decoration:none;padding-bottom:env(safe-area-inset-bottom);
+  }
+
+  .hint-kecil{font-size:11px;color:var(--muted);margin-top:4px;}
+  .bukti-preview{
+    display:none;margin-top:10px;max-width:150px;max-height:150px;
+    border-radius:10px;border:1px solid var(--border);object-fit:cover;
+  }
+  .izin-btn-row{display:flex;gap:10px;margin-top:16px;}
+  .izin-btn-row .btn{flex:1;}
+
+  /* ---- Popup / modal pengajuan izin ---- */
+  .modal-overlay{
+    position:fixed;inset:0;z-index:9999;display:none;
+    align-items:center;justify-content:center;
+    background:rgba(15,38,71,.55);padding:16px;
+  }
+  .modal-box{
+    width:100%;max-width:400px;max-height:90vh;overflow-y:auto;
+    background:#fff7ec;border:1px solid #f3ddb4;border-radius:16px;
+    padding:20px 20px 22px;
+  }
+  .modal-head{display:flex;justify-content:space-between;align-items:center;gap:10px;}
+  .modal-head strong{font-size:15px;color:var(--navy);}
+  .modal-close{
+    background:none;border:none;font-size:18px;line-height:1;color:var(--muted);
+    cursor:pointer;padding:4px 8px;border-radius:8px;
+  }
+  .modal-close:active{background:rgba(0,0,0,.08);}
+  .modal-sub{font-size:12px;color:var(--muted);margin:6px 0 4px;}
+
+  .bukti-upload-row{display:flex;gap:10px;margin-top:8px;}
+  .bukti-upload-row .btn{flex:1;padding:10px;font-size:12.5px;}
+
+  button:disabled{opacity:.6;}
+</style>
+</head>
+<body>
+<div class="wrap" style="max-width:460px;">
+  <div class="header">
+    <div class="logos">🛡️🔺</div>
+    <h1>MESIN ABSENSI</h1>
+    <h2>BPBD PROVINSI KALIMANTAN SELATAN</h2>
+  </div>
+
+  <div class="clock" id="clock">--:--:--</div>
+  <div class="date" id="dateNow">-</div>
+
+  <!-- 1) CARI PEGAWAI TERLEBIH DAHULU -->
+  <label>ID Pegawai</label>
+  <input type="text" id="idInput" placeholder="Masukkan ID / Nomor Registrasi" inputmode="numeric" autocomplete="off">
+
+  <div class="profile-box" id="profileBox" style="display:none;">
+    <img id="profileFoto" src="" alt="Foto profil">
+    <div class="meta">
+      <strong id="profileNama">-</strong>
+      <span id="profileJabatan">-</span>
+    </div>
+  </div>
+
+  <!-- 2) SETELAH PEGAWAI DITEMUKAN, BARU MUNCUL PILIHAN AKSI -->
+  <div class="action-row" id="aksiPilihan" style="display:none;">
+    <button class="btn btn-orange" id="btnAmbilFoto" type="button">📷 Ambil Foto Absen</button>
+    <button class="btn btn-blue" id="btnBukaIzin" type="button">📝 Ajukan Izin</button>
+  </div>
+
+  <input type="file" id="fotoInput" accept="image/*" capture="user" style="display:none;">
+
+  <!-- Muncul hanya setelah "Ambil Foto Absen" ditekan -->
+  <div id="fotoAbsenSection" style="display:none;">
+    <div class="foto-preview-wrap" id="fotoPreviewWrap" style="display:none;">
+      <img id="fotoPreview" class="foto-preview" alt="Hasil foto absen">
+    </div>
+
+    <div class="lokasi-box" id="lokasiBox" style="display:none;">
+      <div class="lokasi-info" id="lokasiInfo"></div>
+      <iframe id="lokasiMap" class="lokasi-map" loading="lazy" title="Peta lokasi"></iframe>
+      <a href="#" id="lokasiLink" target="_blank" rel="noopener" class="lokasi-link" style="display:none;">📍 Buka di Google Maps ↗</a>
+    </div>
+
+    <div class="action-row">
+      <button class="btn btn-green" id="btnMasuk" type="button">MASUK</button>
+      <button class="btn btn-red" id="btnKeluar" type="button">KELUAR</button>
+    </div>
+  </div>
+
+  <div class="status-msg" id="statusMsg" role="status" aria-live="polite"></div>
+
+  <a href="admin.html" class="link-admin">⚙ Panel Manajemen Database</a>
+</div>
+
+<!-- 3) POPUP PENGAJUAN IZIN — tidak memerlukan foto absen (selfie) sama sekali -->
+<div class="modal-overlay" id="izinModalOverlay">
+  <div class="modal-box">
+    <div class="modal-head">
+      <strong>📝 Ajukan Izin</strong>
+      <button type="button" class="modal-close" id="btnTutupIzin" aria-label="Tutup">✕</button>
+    </div>
+    <div class="modal-sub">Pegawai: <strong id="izinNamaPegawai">-</strong></div>
+
+    <label>Alasan Izin</label>
+    <select id="izinSelect"></select>
+
+    <label>Keterangan Tambahan</label>
+    <textarea id="izinKeterangan" rows="3" placeholder="Jelaskan lebih rinci alasan izin Anda (mis. sejak kapan, sampai kapan, kondisi saat ini, dll.)"></textarea>
+
+    <label>Unggah Foto Bukti (opsional)</label>
+    <input type="file" id="izinBuktiFileKamera" accept="image/*" capture="environment" style="display:none;">
+    <input type="file" id="izinBuktiFileGaleri" accept="image/*" style="display:none;">
+    <div class="bukti-upload-row">
+      <button type="button" class="btn btn-outline" id="btnBuktiKamera">📷 Ambil Foto</button>
+      <button type="button" class="btn btn-outline" id="btnBuktiGaleri">🖼️ Pilih dari Galeri</button>
+    </div>
+    <div class="hint-kecil">Contoh: foto/scan surat keterangan sakit, surat tugas, atau dokumen pendukung lainnya. Untuk foto surat, gunakan tombol <strong>Pilih dari Galeri</strong> agar hasilnya lebih jernih &amp; tidak buram dibanding jepretan kamera langsung.</div>
+    <img id="izinBuktiPreview" class="bukti-preview" alt="pratinjau bukti">
+
+    <div class="izin-btn-row">
+      <button class="btn btn-outline" id="btnBatalIzin" type="button">Batal</button>
+      <button class="btn btn-orange" id="btnKirimIzin" type="button">📨 Kirim Pengajuan Izin</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="config.js"></script>
+<script>
+// avatar bawaan dalam bentuk SVG inline — supaya tidak perlu memuat gambar dari internet
+const PLACEHOLDER_AVATAR = 'data:image/svg+xml,' + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="56" height="56"><rect width="56" height="56" fill="#dfe5ec"/><circle cx="28" cy="22" r="10" fill="#b7c2d0"/><path d="M10 50c2-12 12-18 18-18s16 6 18 18" fill="#b7c2d0"/></svg>'
+);
+
+const fotoInput = document.getElementById('fotoInput');
+const btnAmbilFoto = document.getElementById('btnAmbilFoto');
+const aksiPilihan = document.getElementById('aksiPilihan');
+const fotoAbsenSection = document.getElementById('fotoAbsenSection');
+const fotoPreviewWrap = document.getElementById('fotoPreviewWrap');
+const fotoPreview = document.getElementById('fotoPreview');
+const lokasiBox = document.getElementById('lokasiBox');
+const lokasiInfo = document.getElementById('lokasiInfo');
+const lokasiMap = document.getElementById('lokasiMap');
+const lokasiLink = document.getElementById('lokasiLink');
+
+let fotoBase64 = "";
+let lokasiData = null; // {lat, lng, akurasi}
+let pengaturanLokasi = { geofenceAktif: false, lokasiLat: null, lokasiLng: null, radiusMeter: 100 };
+
+// Jarak antar 2 koordinat GPS dalam meter (rumus Haversine) — sama persis dengan
+// perhitungan di server (Code.gs), dipakai di sini hanya untuk peringatan dini
+// sebelum pegawai mengirim absen (validasi yang sesungguhnya tetap di server).
+function hitungJarakMeter(lat1, lng1, lat2, lng2){
+  const R = 6371000;
+  const toRad = d => d * Math.PI / 180;
+  const dLat = toRad(lat2-lat1), dLng = toRad(lng2-lng1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+async function loadPengaturanLokasi(){
+  try{
+    const res = await fetch(`${API_URL}?action=getPengaturanLokasi`);
+    const json = await res.json();
+    if(json.ok && json.data) pengaturanLokasi = json.data;
+  }catch(e){ /* kalau gagal dimuat, anggap geofencing tidak aktif — validasi akhir tetap di server */ }
+}
+loadPengaturanLokasi();
+
+// "Priming" lokasi saat halaman baru dibuka — supaya prompt izin lokasi
+// sudah muncul & GPS sudah "panas" SEBELUM tombol Ambil Foto / Ajukan Izin ditekan.
+// Kenapa ini penting: begitu tombol Ambil Foto ditekan, HP langsung membuka
+// aplikasi kamera terpisah, sehingga halaman ini berpindah ke background.
+// Kalau permintaan lokasi baru dimulai TEPAT saat itu (dan izin belum pernah
+// diberikan sebelumnya), sebagian browser HP menahan/menunda proses di
+// belakang layar sehingga permintaan gagal/timeout — walau sebenarnya bukan
+// masalah izin. Priming di awal ini mengurangi kegagalan tersebut. Gagal di
+// tahap ini tidak apa-apa & tidak ditampilkan ke pegawai; percobaan yang
+// sesungguhnya tetap dilakukan lagi di ambilLokasi().
+function primingLokasi(){
+  if(!navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition(
+    ()=>{ /* berhasil priming — permintaan asli tetap diambil ulang di ambilLokasi() */ },
+    ()=>{ /* gagal priming juga tidak masalah, akan dicoba lagi saat tombol ditekan */ },
+    { enableHighAccuracy:false, timeout:8000, maximumAge:60000 }
+  );
+}
+primingLokasi();
+
+const idInput = document.getElementById('idInput');
+const profileBox = document.getElementById('profileBox');
+const profileFoto = document.getElementById('profileFoto');
+const profileNama = document.getElementById('profileNama');
+const profileJabatan = document.getElementById('profileJabatan');
+
+const izinModalOverlay = document.getElementById('izinModalOverlay');
+const izinNamaPegawai = document.getElementById('izinNamaPegawai');
+const izinSelect = document.getElementById('izinSelect');
+const izinKeterangan = document.getElementById('izinKeterangan');
+const izinBuktiFileKamera = document.getElementById('izinBuktiFileKamera');
+const izinBuktiFileGaleri = document.getElementById('izinBuktiFileGaleri');
+const izinBuktiPreview = document.getElementById('izinBuktiPreview');
+const statusMsg = document.getElementById('statusMsg');
+
+let currentPegawai = null;
+let izinBuktiBase64 = "";
+
+// jam realtime
+function tick(){
+  const now = new Date();
+  document.getElementById('clock').textContent = now.toLocaleTimeString('id-ID');
+  document.getElementById('dateNow').textContent = now.toLocaleDateString('id-ID',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+}
+setInterval(tick,1000); tick();
+
+// ---------- Ambil lokasi GPS (dijalankan saat tombol foto/izin ditekan) ----------
+function ambilLokasi(){
+  lokasiBox.style.display = 'block';
+  lokasiMap.style.display = 'none';
+  lokasiLink.style.display = 'none';
+  lokasiInfo.textContent = '📍 Mengambil lokasi…';
+
+  if(!navigator.geolocation){
+    lokasiData = null;
+    lokasiInfo.innerHTML = '<span class="status-err">Perangkat tidak mendukung GPS</span>';
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      const { latitude, longitude, accuracy } = pos.coords;
+      lokasiData = { lat: latitude, lng: longitude, akurasi: accuracy };
+      let infoText = `📍 Lokasi terekam (akurasi ±${Math.round(accuracy)} m)`;
+      if(pengaturanLokasi.geofenceAktif && pengaturanLokasi.lokasiLat != null && pengaturanLokasi.lokasiLng != null){
+        const jarak = Math.round(hitungJarakMeter(latitude, longitude, pengaturanLokasi.lokasiLat, pengaturanLokasi.lokasiLng));
+        const diluarRadius = jarak > pengaturanLokasi.radiusMeter;
+        infoText += ` — jarak dari kantor: ${jarak} m`;
+        if(diluarRadius){
+          lokasiInfo.innerHTML = `${infoText}<br><span class="status-err">⚠ Di luar radius absen (maks ${pengaturanLokasi.radiusMeter} m). Absen kemungkinan akan ditolak.</span>`;
+        } else {
+          lokasiInfo.textContent = infoText;
+        }
+      } else {
+        lokasiInfo.textContent = infoText;
+      }
+      const d = 0.003;
+      const bbox = `${longitude-d},${latitude-d},${longitude+d},${latitude+d}`;
+      lokasiMap.src = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&marker=${latitude},${longitude}`;
+      lokasiMap.style.display = 'block';
+      lokasiLink.href = `https://www.google.com/maps?q=${latitude},${longitude}`;
+      lokasiLink.style.display = 'inline-block';
+    },
+    (err) => {
+      lokasiData = null;
+      // Pesan dibedakan per kode error — sebelumnya semua penyebab (izin
+      // ditolak, sinyal GPS tidak ada, ATAU cuma timeout karena kamera HP
+      // membuka aplikasi terpisah) ditampilkan dengan pesan yang sama
+      // ("izin ditolak"), padahal seringnya bukan itu penyebabnya.
+      let pesan;
+      switch(err && err.code){
+        case 1: pesan = 'Izin lokasi ditolak. Aktifkan izin lokasi untuk situs ini lewat pengaturan browser/HP.'; break;
+        case 2: pesan = 'Sinyal GPS tidak ditemukan. Coba di luar ruangan atau dekat jendela.'; break;
+        case 3: pesan = 'Waktu pengambilan lokasi habis. Coba lagi sesaat lagi.'; break;
+        default: pesan = 'Lokasi tidak tersedia.';
+      }
+      if(pengaturanLokasi.geofenceAktif){
+        // Geofencing aktif -> lokasi wajib, tampilkan sebagai error yang jelas.
+        lokasiInfo.innerHTML = `<span class="status-err">⚠ ${pesan}</span>`;
+      } else {
+        // Geofencing DIMATIKAN -> lokasi cuma catatan tambahan, bukan syarat.
+        // Absen tetap bisa lanjut walau lokasi gagal diambil, jadi pesannya
+        // dibuat netral (bukan merah/error) supaya tidak membingungkan.
+        lokasiInfo.innerHTML = `ℹ ${pesan} Absen tetap bisa dilanjutkan karena pembatasan radius lokasi sedang dimatikan.`;
+      }
+    },
+    { enableHighAccuracy:true, timeout:15000, maximumAge:30000 }
+  );
+}
+
+// ---------- Foto absen — membuka kamera bawaan HP langsung (bukan kamera di dalam halaman) ----------
+btnAmbilFoto.onclick = () => {
+  ambilLokasi();
+  fotoAbsenSection.style.display = 'block';
+  fotoInput.click();
+};
+
+fotoInput.addEventListener('change', async () => {
+  const file = fotoInput.files[0];
+  if(!file) return;
+  fotoBase64 = await resizeImageFile(file, 720, 0.8);
+  fotoPreview.src = fotoBase64;
+  fotoPreviewWrap.style.display = 'block';
+  btnAmbilFoto.textContent = '🔄 Ganti Foto';
+});
+
+function resetFotoLokasi(){
+  fotoBase64 = '';
+  fotoInput.value = '';
+  fotoAbsenSection.style.display = 'none';
+  fotoPreviewWrap.style.display = 'none';
+  fotoPreview.src = '';
+  btnAmbilFoto.textContent = '📷 Ambil Foto Absen';
+  lokasiData = null;
+  lokasiBox.style.display = 'none';
+  lokasiMap.style.display = 'none';
+  lokasiMap.src = '';
+  lokasiLink.style.display = 'none';
+}
+
+// load opsi izin
+async function loadOpsiIzin(){
+  try{
+    const res = await fetch(`${API_URL}?action=getOpsiIzin`);
+    const json = await res.json();
+    izinSelect.innerHTML = '';
+    (json.data||[]).forEach(o=>{
+      const opt = document.createElement('option');
+      opt.value = o.Teks; opt.textContent = o.Teks;
+      izinSelect.appendChild(opt);
+    });
+  }catch(e){ /* silent */ }
+}
+loadOpsiIzin();
+
+// cari pegawai saat ID diketik — INI LANGKAH PERTAMA sebelum pilihan aksi apa pun muncul
+let debounceT;
+idInput.addEventListener('input',()=>{
+  clearTimeout(debounceT);
+  debounceT = setTimeout(cariPegawai,400);
+});
+
+async function cariPegawai(){
+  const id = idInput.value.trim();
+  currentPegawai = null;
+  profileBox.style.display = 'none';
+  aksiPilihan.style.display = 'none';
+  tutupIzinModal();
+  resetFotoLokasi();
+  if(!id){ statusMsg.textContent = ''; return; }
+  try{
+    const res = await fetch(`${API_URL}?action=cariPegawai&id=${encodeURIComponent(id)}`);
+    const json = await res.json();
+    if(json.ok && json.data){
+      currentPegawai = json.data;
+      profileFoto.src = json.data.FotoURL || PLACEHOLDER_AVATAR;
+      profileNama.textContent = json.data.Nama;
+      profileJabatan.textContent = json.data.Jabatan || '';
+      profileBox.style.display = 'flex';
+      // Baru setelah pegawai ditemukan, opsi "Ambil Foto Absen" / "Ajukan Izin" ditampilkan.
+      aksiPilihan.style.display = 'flex';
+      statusMsg.textContent = '';
+    } else {
+      statusMsg.innerHTML = '<span class="status-err">ID tidak ditemukan</span>';
+    }
+  }catch(e){
+    statusMsg.innerHTML = '<span class="status-err">Gagal menghubungi server</span>';
+  }
+}
+
+// ---------- Popup pengajuan izin: buka / tutup / kirim ----------
+// Sengaja TIDAK memerlukan foto absen (selfie) — pegawai bisa langsung
+// mengajukan izin begitu ditemukan, tanpa harus menekan "Ambil Foto Absen".
+function bukaIzinModal(){
+  if(!currentPegawai){
+    statusMsg.innerHTML = '<span class="status-err">Cari & pilih pegawai dulu</span>';
+    return;
+  }
+  izinNamaPegawai.textContent = currentPegawai.Nama;
+  izinModalOverlay.style.display = 'flex';
+  // Siapkan lokasi di latar belakang (dibutuhkan server hanya jika geofencing aktif).
+  ambilLokasi();
+}
+function tutupIzinModal(){
+  izinModalOverlay.style.display = 'none';
+}
+document.getElementById('btnBukaIzin').onclick = bukaIzinModal;
+document.getElementById('btnTutupIzin').onclick = () => { tutupIzinModal(); resetIzinForm(); };
+document.getElementById('btnBatalIzin').onclick = () => { tutupIzinModal(); resetIzinForm(); };
+// Tutup popup juga saat area gelap di luar kotak ditekan, supaya lebih gampang dipakai.
+izinModalOverlay.addEventListener('click', (e)=>{
+  if(e.target === izinModalOverlay){ tutupIzinModal(); resetIzinForm(); }
+});
+
+function resetIzinForm(){
+  izinKeterangan.value = '';
+  izinBuktiFileKamera.value = '';
+  izinBuktiFileGaleri.value = '';
+  izinBuktiBase64 = '';
+  izinBuktiPreview.style.display = 'none';
+  izinBuktiPreview.src = '';
+}
+
+// kompres gambar ke lebar maksimum tertentu — dipakai untuk foto absen & foto bukti izin
+function resizeImageFile(file, maxWidth, quality){
+  return new Promise((resolve)=>{
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, maxWidth / img.width);
+        const c = document.createElement('canvas');
+        c.width = Math.round(img.width * scale);
+        c.height = Math.round(img.height * scale);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        resolve(c.toDataURL('image/jpeg', quality));
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// ---------- Unggah foto bukti izin: dari KAMERA atau dari GALERI ----------
+async function handleBuktiFile(file){
+  if(!file) return;
+  if(!file.type.startsWith('image/')){
+    statusMsg.innerHTML = '<span class="status-err">File bukti harus berupa gambar (JPG/PNG)</span>';
+    return;
+  }
+  izinBuktiBase64 = await resizeImageFile(file, 800, 0.75);
+  izinBuktiPreview.src = izinBuktiBase64;
+  izinBuktiPreview.style.display = 'block';
+}
+document.getElementById('btnBuktiKamera').onclick = () => izinBuktiFileKamera.click();
+document.getElementById('btnBuktiGaleri').onclick = () => izinBuktiFileGaleri.click();
+izinBuktiFileKamera.addEventListener('change', () => handleBuktiFile(izinBuktiFileKamera.files[0]));
+izinBuktiFileGaleri.addEventListener('change', () => handleBuktiFile(izinBuktiFileGaleri.files[0]));
+
+document.getElementById('btnKirimIzin').onclick = () => {
+  const alasan = izinSelect.value;
+  if(!alasan){
+    statusMsg.innerHTML = '<span class="status-err">Pilih alasan izin terlebih dahulu</span>';
+    return;
+  }
+  const tambahan = izinKeterangan.value.trim();
+  const keteranganGabungan = alasan + (tambahan ? ' — ' + tambahan : '');
+  kirimAbsen('IZIN', keteranganGabungan, izinBuktiBase64);
+};
+
+const semuaTombolAksi = ['btnMasuk','btnKeluar','btnKirimIzin'].map(id=>document.getElementById(id));
+function setTombolAksi(disabled){
+  semuaTombolAksi.forEach(b=> b.disabled = disabled);
+}
+
+async function kirimAbsen(status, keterangan, fotoBukti){
+  if(!currentPegawai){
+    statusMsg.innerHTML = '<span class="status-err">Cari & pilih pegawai dulu</span>';
+    return;
+  }
+  // Foto selfie ("Ambil Foto Absen") hanya wajib untuk MASUK & KELUAR.
+  // Pengajuan IZIN tidak memerlukan foto selfie ini sama sekali — foto bukti
+  // izin (opsional) diunggah tersendiri lewat popup Ajukan Izin.
+  if(status !== 'IZIN' && !fotoBase64){
+    statusMsg.innerHTML = '<span class="status-err">Silakan ambil foto terlebih dahulu.</span>';
+    return;
+  }
+  // Pengecekan awal di HP (untuk pengalaman lebih cepat) — validasi yang
+  // sesungguhnya dan tidak bisa diakali tetap dilakukan di server (Code.gs).
+  if(pengaturanLokasi.geofenceAktif){
+    if(!lokasiData){
+      statusMsg.innerHTML = '<span class="status-err">Lokasi GPS wajib aktif. Aktifkan izin lokasi lalu coba lagi.</span>';
+      return;
+    }
+    if(pengaturanLokasi.lokasiLat != null && pengaturanLokasi.lokasiLng != null){
+      const jarak = Math.round(hitungJarakMeter(lokasiData.lat, lokasiData.lng, pengaturanLokasi.lokasiLat, pengaturanLokasi.lokasiLng));
+      if(jarak > pengaturanLokasi.radiusMeter){
+        statusMsg.innerHTML = `<span class="status-err">Anda berada di luar radius absen (jarak ${jarak} m, maksimal ${pengaturanLokasi.radiusMeter} m dari kantor).</span>`;
+        return;
+      }
+    }
+  }
+
+  setTombolAksi(true);
+  statusMsg.textContent = 'Mengirim...';
+
+  try{
+    const res = await fetch(API_URL,{
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({
+        action:'absen',
+        id: currentPegawai.ID,
+        nama: currentPegawai.Nama,
+        status: status,
+        keterangan: keterangan || '',
+        fotoBase64: fotoBase64,
+        fotoBukti: fotoBukti || '',
+        lokasiLat: lokasiData ? lokasiData.lat : '',
+        lokasiLng: lokasiData ? lokasiData.lng : '',
+        lokasiAkurasi: lokasiData ? Math.round(lokasiData.akurasi) : ''
+      })
+    });
+    const json = await res.json();
+    if(json.ok){
+      statusMsg.innerHTML = `<span class="status-ok">Berhasil dicatat: ${status}</span>`;
+      showToast(`${currentPegawai.Nama} — ${status}`);
+      idInput.value = '';
+      profileBox.style.display = 'none';
+      aksiPilihan.style.display = 'none';
+      currentPegawai = null;
+      resetFotoLokasi();
+      tutupIzinModal();
+      resetIzinForm();
+    } else {
+      statusMsg.innerHTML = '<span class="status-err">Gagal: '+json.error+'</span>';
+    }
+  }catch(e){
+    statusMsg.innerHTML = '<span class="status-err">Gagal mengirim data</span>';
+  } finally {
+    setTombolAksi(false);
+  }
+}
+
+document.getElementById('btnMasuk').onclick = ()=>kirimAbsen('MASUK','');
+document.getElementById('btnKeluar').onclick = ()=>kirimAbsen('KELUAR','');
+
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2500);
+}
+</script>
+</body>
+</html>

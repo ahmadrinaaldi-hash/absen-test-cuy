@@ -1,0 +1,1104 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Panel Manajemen Database — BPBD Kalimantan Selatan</title>
+<link rel="icon" href="https://avatars.githubusercontent.com/u/295258675?v=4" />
+<link rel="stylesheet" href="style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  .login-gate{
+    position:fixed;inset:0;z-index:9999;display:none;
+    align-items:center;justify-content:center;
+    background:#eef2f7;padding:16px;
+  }
+  .login-box{
+    width:100%;max-width:360px;background:#fff;border-radius:16px;
+    padding:28px 24px 24px;text-align:center;
+    box-shadow:0 10px 30px rgba(15,38,71,0.12);
+  }
+  .login-box label{display:block;text-align:left;margin-top:14px;font-size:13px;color:var(--muted);}
+  .login-box label:first-of-type{margin-top:18px;}
+  .login-box input{font-size:16px;}
+  .login-sub{color:var(--muted);font-size:12px;margin:6px 0 0;}
+  .login-msg{min-height:18px;font-size:13px;margin-top:12px;}
+  .status-ok{color:var(--green);font-weight:700;}
+  .status-err{color:var(--red);font-weight:700;}
+
+  .hint-kecil{font-size:11px;color:var(--muted);margin-top:4px;}
+  .lokasi-box{margin-top:12px;background:#f6f8fb;border-radius:12px;padding:12px 14px;}
+  .lokasi-info{font-size:12px;color:var(--muted);margin-bottom:8px;}
+  .lokasi-map{width:100%;height:140px;border:0;border-radius:10px;}
+
+  /* ---- Tombol Refresh Melayang (fitur dari admin_1.html / index_1.html) ---- */
+  .refresh-btn{
+    position:fixed;
+    bottom:20px;right:20px;
+    width:50px;height:50px;
+    background-color:#ff6b00;
+    color:#fff;
+    border:none;
+    border-radius:50%;
+    box-shadow:0 4px 10px rgba(0,0,0,.3);
+    cursor:pointer;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    font-size:24px;
+    z-index:9999;
+    transition:transform .2s, background-color .2s;
+  }
+  .refresh-btn:active{transform:scale(.9);background-color:#e05e00;}
+  .spinning{animation:spin .8s ease-in-out;}
+  @keyframes spin{
+    0%{transform:rotate(0deg);}
+    100%{transform:rotate(360deg);}
+  }
+</style>
+</head>
+<body>
+<button class="refresh-btn" id="refreshBtn" type="button" title="Muat ulang aplikasi">🔄</button>
+
+<div id="loginGate" class="login-gate">
+  <div class="login-box">
+    <div class="logos">🛡️🔺</div>
+    <h1 style="font-size:16px;">PANEL MANAJEMEN DATABASE</h1>
+    <h2 style="font-size:11px;">BPBD PROVINSI KALIMANTAN SELATAN</h2>
+    <p class="login-sub">Halaman ini khusus untuk admin yang berwenang.</p>
+
+    <label>Username</label>
+    <input type="text" id="loginUser" autocomplete="username" placeholder="Username">
+
+    <label>Password</label>
+    <input type="password" id="loginPass" autocomplete="current-password" placeholder="Password">
+
+    <button class="btn btn-blue btn-block" id="btnLogin" type="button" style="margin-top:16px;">🔒 Masuk</button>
+    <div class="login-msg" id="loginMsg"></div>
+  </div>
+</div>
+
+<div class="wrap" id="appWrap" style="display:none;">
+  <div class="header">
+    <div class="logos">🛡️🔺</div>
+    <h1>PANEL MANAJEMEN DATABASE</h1>
+    <h2>BPBD PROVINSI KALIMANTAN SELATAN</h2>
+    <button type="button" id="btnLogout" class="btn btn-outline" style="margin-top:10px;padding:6px 14px;font-size:12px;">🚪 Keluar</button>
+    <a href="rekap.html" class="btn btn-outline" style="margin-top:8px;margin-left:8px;padding:6px 14px;font-size:12px;text-decoration:none;display:inline-block;">📊 Rekap Bulanan</a>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="pegawai">👤 PEGAWAI</button>
+    <button class="tab" data-tab="log">📄 LOG ABSENSI</button>
+    <button class="tab" data-tab="izin">⚙ LIST OPSI IZIN</button>
+    <button class="tab" data-tab="lokasi">📍 LOKASI ABSEN</button>
+    <button class="tab" data-tab="jam">⏰ JAM MASUK</button>
+  </div>
+
+  <!-- ===================== TAB PEGAWAI ===================== -->
+  <section id="tab-pegawai">
+    <label>ID Number / Nomor Registrasi</label>
+    <input type="text" id="pId" placeholder="Masukkan ID Pegawai">
+    <label>Nama Lengkap Pegawai</label>
+    <input type="text" id="pNama" placeholder="Masukkan Nama Lengkap">
+    <label>Jabatan</label>
+    <input type="text" id="pJabatan" placeholder="Masukkan Jabatan">
+    <label>Bidang / Divisi</label>
+    <input type="text" id="pBidang" placeholder="Masukkan Bidang Kerja">
+    <label>Jenis Piket</label>
+    <select id="pPiket">
+      <option value="Tidak Piket">Tidak Piket (jam kerja reguler)</option>
+      <option value="Piket Pagi">Piket Pagi</option>
+      <option value="Piket Malam">Piket Malam</option>
+    </select>
+    <div class="hint-kecil">
+      Menentukan batas jam "Tepat Waktu"/"Telat" mana yang dipakai untuk pegawai ini saat MASUK —
+      diatur di tab "⏰ JAM MASUK". Pegawai yang tidak ikut jadwal piket biarkan "Tidak Piket".
+    </div>
+    <label>URL Foto Profil</label>
+    <input type="url" id="pFoto" placeholder="https://drive.google.com/...">
+    <button class="btn btn-blue btn-block" id="btnSavePegawai">📋 DAFTARKAN PEGAWAI</button>
+    <input type="hidden" id="pRow">
+
+    <div class="section-title">
+      📋 DATABASE PESERTA/PEGAWAI
+      <input type="text" id="searchPegawai" placeholder="Cari Pegawai..." style="max-width:220px;">
+      <span class="badge" id="countPegawai">0 ORANG</span>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Foto</th><th>ID Number</th><th>Nama Pegawai</th><th>Jabatan</th><th>Bidang</th><th>Piket</th><th>Aksi</th></tr></thead>
+        <tbody id="bodyPegawai"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="emptyPegawai" style="display:none;">Belum ada data pegawai.</div>
+  </section>
+
+  <!-- ===================== TAB LOG ABSENSI ===================== -->
+  <section id="tab-log" style="display:none;">
+    <div class="section-title">
+      📄 HISTORI RIWAYAT LOG ABSENSI MENDETAIL
+      <span class="badge" id="countLog">0 BARIS DITEMUKAN</span>
+    </div>
+    <div class="filters">
+      <input type="text" id="searchLog" placeholder="Ketik nama / ID pegawai...">
+      <select id="filterBulan"><option value="">-- Semua Bulan --</option></select>
+      <select id="filterTahun"><option value="">-- Semua Tahun --</option></select>
+      <select id="filterKetepatan">
+        <option value="">-- Semua Ketepatan --</option>
+        <option value="Tepat Waktu">Tepat Waktu (TW)</option>
+        <option value="Telat">Telat (T)</option>
+      </select>
+    </div>
+    <button class="btn btn-blue" id="btnExportLogPdf" style="margin:10px 0 4px;" onclick="exportLogPDF()">📄 Export Log Bulanan ke PDF (per karyawan)</button>
+    <div class="hint-kecil" style="margin-bottom:10px;">PDF dibuat per karyawan untuk Bulan &amp; Tahun yang dipilih di atas, dalam bentuk kalender kehadiran (nama hari, tanggal, jam masuk + ketepatan, dan foto per hari) — dijamin muat 1 halaman per karyawan. Pilih Bulan &amp; Tahun dulu sebelum export (filter Ketepatan tidak berlaku untuk PDF ini). Ketik nama/ID di kotak pencarian untuk export 1 karyawan saja; kosongkan untuk export semua karyawan sekaligus (bisa memakan waktu lebih lama karena memuat banyak foto).</div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Hari / Tanggal</th><th>ID Pegawai</th><th>Nama Pegawai</th><th>Status</th><th>Ketepatan</th><th>Foto</th><th>Bukti Izin</th><th>Lokasi</th></tr></thead>
+        <tbody id="bodyLog"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="emptyLog" style="display:none;">Belum ada log absensi.</div>
+  </section>
+
+  <!-- ===================== TAB OPSI IZIN ===================== -->
+  <section id="tab-izin" style="display:none;">
+    <label>Teks / Nama Alasan Pilihan Izin</label>
+    <input type="text" id="izinTeks" placeholder="Contoh: Cuti Melahirkan / Dinas Luar Kota">
+    <input type="hidden" id="izinRow">
+    <button class="btn btn-green btn-block" id="btnSaveIzin">➕ TAMBAHKAN OPSI IZIN</button>
+
+    <div class="section-title">
+      📋 DAFTAR DROPDOWN PILIHAN IZIN AKTIF
+      <span class="badge" id="countIzin">0 OPSI</span>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>No Baris</th><th>Pilihan Alasan Izin (Akan muncul di Mesin Absen)</th><th>Aksi</th></tr></thead>
+        <tbody id="bodyIzin"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="emptyIzin" style="display:none;">Belum ada opsi izin.</div>
+
+    <a href="index.html" class="btn btn-outline btn-block" style="margin-top:18px;text-decoration:none;">← KEMBALI KE MESIN ABSENSI</a>
+  </section>
+
+  <!-- ===================== TAB LOKASI ABSEN (GEOFENCING) ===================== -->
+  <section id="tab-lokasi" style="display:none;">
+    <div class="section-title" style="margin-top:0;">📍 PEMBATASAN RADIUS LOKASI ABSEN</div>
+    <p style="font-size:12px;color:var(--muted);margin:0 0 14px;">
+      Kalau diaktifkan, pegawai hanya bisa MASUK / KELUAR / mengajukan izin selama berada dalam radius
+      yang ditentukan dari titik kantor. Pengecekan dilakukan di server, jadi tidak bisa diakali lewat
+      GPS palsu di HP pegawai.
+    </p>
+
+    <label style="display:flex;align-items:center;gap:8px;margin-top:0;">
+      <input type="checkbox" id="geoAktif" style="width:16px;height:16px;">
+      Aktifkan pembatasan radius lokasi
+    </label>
+
+    <label>Titik Lokasi Kantor</label>
+    <div style="display:flex;gap:8px;">
+      <input type="number" id="geoLat" placeholder="Latitude" step="any" style="flex:1;">
+      <input type="number" id="geoLng" placeholder="Longitude" step="any" style="flex:1;">
+    </div>
+    <div class="hint-kecil" style="margin-top:6px;">
+      Cara mendapatkan koordinat kantor: buka Google Maps di HP/komputer → cari & tekan lama (klik kanan
+      di komputer) tepat di lokasi kantor → koordinat (Latitude, Longitude) akan tampil dan bisa disalin.
+      Atau tekan tombol di bawah ini saat Anda sedang berada di lokasi kantor.
+    </div>
+    <button type="button" class="btn btn-outline btn-block" id="btnGeoGunakanLokasiSaya" style="margin-top:10px;">📌 Gunakan Lokasi Perangkat Ini Sekarang</button>
+
+    <label>Radius Diizinkan (meter)</label>
+    <input type="number" id="geoRadius" placeholder="Contoh: 100" min="1">
+    <div class="hint-kecil">Jarak toleransi dari titik kantor. GPS HP biasanya punya akurasi ±10–30 m, jadi disarankan minimal 50–100 m supaya tidak terlalu ketat.</div>
+
+    <div class="lokasi-box" id="geoMapBox" style="display:none;margin-top:14px;">
+      <div class="lokasi-info" id="geoMapInfo">Pratinjau titik lokasi kantor:</div>
+      <iframe id="geoMap" class="lokasi-map" style="height:180px;" loading="lazy" title="Peta lokasi kantor"></iframe>
+    </div>
+
+    <button class="btn btn-blue btn-block" id="btnSimpanGeo" style="margin-top:16px;">💾 SIMPAN PENGATURAN LOKASI</button>
+    <div class="status-msg" id="geoStatusMsg" style="text-align:left;"></div>
+  </section>
+
+  <!-- ===================== TAB JAM MASUK (TELAT / TEPAT WAKTU) ===================== -->
+  <section id="tab-jam" style="display:none;">
+    <div class="section-title" style="margin-top:0;">⏰ BATAS JAM MASUK (TEPAT WAKTU / TELAT)</div>
+    <p style="font-size:12px;color:var(--muted);margin:0 0 14px;">
+      Saat pegawai menekan tombol MASUK, waktu absen dibandingkan dengan batas jam di bawah ini
+      (dihitung di server, memakai jam saat data diterima, DAN menyesuaikan dengan Jenis Piket
+      pegawai yang diatur di tab "👤 PEGAWAI"). Kolom "Ketepatan" pada Log Absensi & Export PDF
+      akan otomatis terisi "Tepat Waktu" (TW) atau "Telat" (T). Aturan ini hanya berlaku
+      untuk status MASUK — status KELUAR dan IZIN tidak dipengaruhi.
+    </p>
+
+    <label>🕗 Pegawai "Tidak Piket" — Batas Jam Tepat Waktu (format JJ:MM:DD)</label>
+    <input type="text" id="jamBatas" placeholder="08:00:01" pattern="[0-9]{2}:[0-9]{2}:[0-9]{2}" maxlength="8">
+    <div class="hint-kecil">
+      Dipakai untuk pegawai dengan Jenis Piket "Tidak Piket" (jam kerja reguler). Contoh:
+      <code>08:00:01</code> berarti absen jam 08:00:00 atau lebih awal = <b>Tepat Waktu (TW)</b>,
+      dan jam 08:00:02 ke atas = <b>Telat (T)</b>.
+    </div>
+
+    <label style="margin-top:20px;">🌅 Pegawai "Piket Pagi" — Batas Jam Tepat Waktu</label>
+    <input type="text" id="jamBatasPagi" placeholder="08:00:01" pattern="[0-9]{2}:[0-9]{2}:[0-9]{2}" maxlength="8">
+    <div class="hint-kecil">Dipakai khusus untuk pegawai dengan Jenis Piket "Piket Pagi".</div>
+
+    <label style="margin-top:20px;">🌙 Pegawai "Piket Malam" — Batas Jam Tepat Waktu</label>
+    <input type="text" id="jamBatasMalam" placeholder="19:00:01" pattern="[0-9]{2}:[0-9]{2}:[0-9]{2}" maxlength="8">
+    <div class="hint-kecil">
+      Dipakai khusus untuk pegawai dengan Jenis Piket "Piket Malam". Sesuaikan dengan jam mulai
+      piket malam yang berlaku (mis. kalau piket malam mulai jam 19:00, isi <code>19:00:01</code>).
+    </div>
+
+    <button class="btn btn-blue btn-block" id="btnSimpanJam" style="margin-top:16px;">💾 SIMPAN SEMUA BATAS JAM MASUK</button>
+    <div class="status-msg" id="jamStatusMsg" style="text-align:left;"></div>
+  </section>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="admin-config.js"></script>
+<script src="config.js"></script>
+<script>
+const toastEl = document.getElementById('toast');
+function showToast(msg){ toastEl.textContent = msg; toastEl.classList.add('show'); setTimeout(()=>toastEl.classList.remove('show'),2200); }
+
+const BULAN_NAMA = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+
+// Mencegah teks dari data (nama/keterangan/dsb.) merusak tampilan HTML
+function escapeHtml(str){
+  const div = document.createElement('div');
+  div.textContent = (str===undefined || str===null) ? '' : String(str);
+  return div.innerHTML;
+}
+
+// ================= LOGIN ADMIN =================
+// Catatan: ini adalah gerbang login di sisi tampilan (front-end) untuk
+// mencegah orang iseng/tidak berwenang membuka panel ini secara tidak
+// sengaja. Kredensial diverifikasi oleh SERVER (action "adminLogin" di
+// Code.gs, dicek terhadap sheet "AdminUsers") — bukan cuma di browser.
+const SESSION_KEY = 'bpbd_admin_session';
+const ATTEMPT_KEY = 'bpbd_admin_attempts';
+const MAX_PERCOBAAN = 5;
+const LOCKOUT_MS = 60000;
+
+function getSession(){
+  try{ return JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null'); }catch(e){ return null; }
+}
+function isLoggedIn(){
+  const s = getSession();
+  return !!s && Date.now() < s.expires;
+}
+function startSession(username){
+  const jamSesi = (typeof ADMIN_SESSION_HOURS !== 'undefined') ? ADMIN_SESSION_HOURS : 8;
+  sessionStorage.setItem(SESSION_KEY, JSON.stringify({ username, expires: Date.now() + jamSesi*60*60*1000 }));
+}
+function endSession(){ sessionStorage.removeItem(SESSION_KEY); }
+
+function getAttempts(){
+  try{ return JSON.parse(sessionStorage.getItem(ATTEMPT_KEY) || 'null') || {count:0, lockUntil:0}; }catch(e){ return {count:0, lockUntil:0}; }
+}
+function setAttempts(a){ sessionStorage.setItem(ATTEMPT_KEY, JSON.stringify(a)); }
+
+function showApp(){
+  document.getElementById('loginGate').style.display = 'none';
+  document.getElementById('appWrap').style.display = 'block';
+  loadPegawai();
+  loadLog();
+  loadIzin();
+  loadPengaturanLokasi();
+  loadPengaturanWaktu();
+}
+
+async function tryLogin(){
+  const msg = document.getElementById('loginMsg');
+  const attempts = getAttempts();
+  if(Date.now() < attempts.lockUntil){
+    const sisaDetik = Math.ceil((attempts.lockUntil - Date.now())/1000);
+    msg.innerHTML = `<span class="status-err">Terlalu banyak percobaan gagal. Coba lagi dalam ${sisaDetik} detik.</span>`;
+    return;
+  }
+  const username = document.getElementById('loginUser').value.trim();
+  const password = document.getElementById('loginPass').value;
+  if(!username || !password){
+    msg.innerHTML = '<span class="status-err">Username dan password wajib diisi</span>';
+    return;
+  }
+
+  const btn = document.getElementById('btnLogin');
+  btn.disabled = true; btn.textContent = '⏳ Memeriksa...';
+
+  // Password dikirim apa adanya ke server (bukan hash) lewat HTTPS —
+  // server (adminLogin di Code.gs) yang meng-hash & mencocokkannya
+  // dengan sheet "AdminUsers". Ini supaya kredensial tidak bisa
+  // dipalsukan hanya dengan membaca kode di browser.
+  let valid = false;
+  let pesanError = 'Tidak dapat menghubungi server. Cek koneksi / API_URL.';
+  try{
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'adminLogin', username, password })
+    });
+    const json = await res.json();
+    valid = !!json.ok;
+    if(!valid && json.error) pesanError = json.error;
+  }catch(e){ valid = false; }
+
+  btn.disabled = false; btn.textContent = '🔒 Masuk';
+
+  if(valid){
+    setAttempts({count:0, lockUntil:0});
+    startSession(username);
+    document.getElementById('loginPass').value = '';
+    showApp();
+  } else {
+    const count = attempts.count + 1;
+    const lockUntil = count >= MAX_PERCOBAAN ? Date.now() + LOCKOUT_MS : 0;
+    setAttempts({ count: lockUntil ? 0 : count, lockUntil });
+    msg.innerHTML = lockUntil
+      ? `<span class="status-err">Terlalu banyak percobaan gagal. Coba lagi dalam ${LOCKOUT_MS/1000} detik.</span>`
+      : `<span class="status-err">${escapeHtml(pesanError)}</span>`;
+  }
+}
+
+document.getElementById('btnLogin').onclick = tryLogin;
+document.getElementById('loginPass').addEventListener('keydown', e=>{ if(e.key==='Enter') tryLogin(); });
+document.getElementById('loginUser').addEventListener('keydown', e=>{ if(e.key==='Enter') document.getElementById('loginPass').focus(); });
+document.getElementById('btnLogout').addEventListener('click', ()=>{
+  endSession();
+  location.reload();
+});
+
+if(isLoggedIn()){
+  showApp();
+} else {
+  document.getElementById('loginGate').style.display = 'flex';
+}
+
+// -------- TAB SWITCH --------
+document.querySelectorAll('.tab').forEach(btn=>{
+  btn.onclick = ()=>{
+    document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    ['pegawai','log','izin','lokasi','jam'].forEach(t=>{
+      document.getElementById('tab-'+t).style.display = (t===btn.dataset.tab)?'block':'none';
+    });
+  };
+});
+
+// ================= PEGAWAI =================
+let pegawaiCache = [];
+async function loadPegawai(){
+  document.getElementById('bodyPegawai').innerHTML = '<tr><td colspan="7" class="loading">Memuat data...</td></tr>';
+  try{
+    const res = await fetch(`${API_URL}?action=getPegawai`);
+    const json = await res.json();
+    pegawaiCache = json.data || [];
+    renderPegawai();
+  }catch(e){
+    document.getElementById('bodyPegawai').innerHTML = '<tr><td colspan="7" class="loading">Gagal memuat data. Cek API_URL di config.js</td></tr>';
+  }
+}
+// Label singkat untuk badge "Piket" di tabel — dipakai juga saat render.
+function badgePiket(piket){
+  const p = piket || 'Tidak Piket';
+  if(p === 'Piket Pagi') return `<span class="pill pill-in">${escapeHtml(p)}</span>`;
+  if(p === 'Piket Malam') return `<span class="pill pill-izin">${escapeHtml(p)}</span>`;
+  return `<span class="badge">${escapeHtml(p)}</span>`;
+}
+function renderPegawai(){
+  const q = document.getElementById('searchPegawai').value.toLowerCase();
+  const list = pegawaiCache.filter(p => String(p.Nama).toLowerCase().includes(q) || String(p.ID).toLowerCase().includes(q));
+  const body = document.getElementById('bodyPegawai');
+  document.getElementById('countPegawai').textContent = pegawaiCache.length + ' ORANG';
+  document.getElementById('emptyPegawai').style.display = list.length? 'none':'block';
+  body.innerHTML = list.map(p=>`
+    <tr>
+      <td><img class="avatar" src="${escapeHtml(p.FotoURL)||'https://placehold.co/38x38?text=%20'}"></td>
+      <td>${escapeHtml(p.ID)}</td>
+      <td class="name-strong">${escapeHtml(p.Nama)}<br><span style="font-weight:400;color:var(--muted);font-size:12px;">${escapeHtml(p.Jabatan)||''}</span></td>
+      <td>${escapeHtml(p.Jabatan)||''}</td>
+      <td>${escapeHtml(p.Bidang)||''}</td>
+      <td>${badgePiket(p.Piket)}</td>
+      <td>
+        <button class="btn btn-orange" onclick='editPegawai(${p._row})'>✏ Edit</button>
+        <button class="btn btn-red" onclick='hapusPegawai(${p._row})'>🗑 Hapus</button>
+      </td>
+    </tr>`).join('');
+}
+document.getElementById('searchPegawai').addEventListener('input', renderPegawai);
+
+function editPegawai(row){
+  const p = pegawaiCache.find(x=>x._row===row);
+  if(!p) return;
+  document.getElementById('pRow').value = row;
+  document.getElementById('pId').value = p.ID;
+  document.getElementById('pNama').value = p.Nama;
+  document.getElementById('pJabatan').value = p.Jabatan;
+  document.getElementById('pBidang').value = p.Bidang;
+  document.getElementById('pPiket').value = p.Piket || 'Tidak Piket';
+  document.getElementById('pFoto').value = p.FotoURL;
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+async function hapusPegawai(row){
+  if(!confirm('Hapus pegawai ini?')) return;
+  try{
+    const res = await fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({action:'deletePegawai', row})});
+    const json = await res.json();
+    if(json.ok){ showToast('Pegawai dihapus'); loadPegawai(); }
+    else { showToast('Gagal: ' + (json.error || 'terjadi kesalahan')); }
+  }catch(e){ showToast('Gagal menghubungi server'); }
+}
+
+document.getElementById('btnSavePegawai').onclick = async ()=>{
+  const id = document.getElementById('pId').value.trim();
+  const nama = document.getElementById('pNama').value.trim();
+  if(!id || !nama){ showToast('ID dan Nama wajib diisi'); return; }
+  const row = document.getElementById('pRow').value;
+  const payload = {
+    action: row? 'updatePegawai':'addPegawai',
+    row: row? Number(row): undefined,
+    id, nama,
+    jabatan: document.getElementById('pJabatan').value.trim(),
+    bidang: document.getElementById('pBidang').value.trim(),
+    piket: document.getElementById('pPiket').value,
+    fotoUrl: document.getElementById('pFoto').value.trim()
+  };
+  const btn = document.getElementById('btnSavePegawai');
+  btn.disabled = true;
+  try{
+    const res = await fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body: JSON.stringify(payload)});
+    const json = await res.json();
+    if(json.ok){
+      showToast(row? 'Data pegawai diperbarui':'Pegawai terdaftar');
+      ['pId','pNama','pJabatan','pBidang','pFoto','pRow'].forEach(id=>document.getElementById(id).value='');
+      document.getElementById('pPiket').value = 'Tidak Piket';
+      loadPegawai();
+    } else {
+      showToast('Gagal: ' + (json.error || 'terjadi kesalahan'));
+    }
+  }catch(e){
+    showToast('Gagal menghubungi server');
+  } finally {
+    btn.disabled = false;
+  }
+};
+
+// ================= LOG ABSENSI =================
+let logCache = [];
+async function loadLog(){
+  document.getElementById('bodyLog').innerHTML = '<tr><td colspan="8" class="loading">Memuat data...</td></tr>';
+  try{
+    const res = await fetch(`${API_URL}?action=getLog`);
+    const json = await res.json();
+    logCache = json.data || [];
+    isiFilterTanggal();
+    renderLog();
+  }catch(e){
+    document.getElementById('bodyLog').innerHTML = '<tr><td colspan="8" class="loading">Gagal memuat data. Cek API_URL di config.js</td></tr>';
+  }
+}
+function isiFilterTanggal(){
+  const bulanSel = document.getElementById('filterBulan');
+  const tahunSel = document.getElementById('filterTahun');
+  const tahunSet = new Set();
+  logCache.forEach(l=>{ const d = new Date(l.Timestamp); if(!isNaN(d)) tahunSet.add(d.getFullYear()); });
+  if(bulanSel.options.length<=1){
+    BULAN_NAMA.forEach((b,i)=>{ const o=document.createElement('option'); o.value=i+1; o.textContent=b; bulanSel.appendChild(o); });
+  }
+  if(tahunSel.options.length<=1){
+    [...tahunSet].sort((a,b)=>b-a).forEach(y=>{ const o=document.createElement('option'); o.value=y; o.textContent=y; tahunSel.appendChild(o); });
+  }
+  // Default-kan ke bulan & tahun berjalan (kalau belum pernah dipilih pengguna) —
+  // supaya "Export Log ke PDF" langsung siap dipakai sebagai laporan bulanan
+  // tanpa admin harus memilih bulan/tahun secara manual dulu.
+  const now = new Date();
+  if(!bulanSel.value) bulanSel.value = now.getMonth()+1;
+  if(!tahunSel.value && tahunSel.querySelector(`option[value="${now.getFullYear()}"]`)) tahunSel.value = now.getFullYear();
+}
+// Dipakai bersama oleh tampilan tabel & export PDF, supaya hasil export selalu
+// sesuai dengan apa yang sedang difilter/dicari di layar.
+function getFilteredLog(){
+  const q = document.getElementById('searchLog').value.toLowerCase();
+  const bulan = document.getElementById('filterBulan').value;
+  const tahun = document.getElementById('filterTahun').value;
+  const ketepatan = document.getElementById('filterKetepatan').value;
+  return logCache.filter(l=>{
+    const d = new Date(l.Timestamp);
+    if(bulan && (d.getMonth()+1) != bulan) return false;
+    if(tahun && d.getFullYear() != tahun) return false;
+    if(ketepatan && l.Ketepatan !== ketepatan) return false;
+    return String(l.Nama).toLowerCase().includes(q) || String(l.ID).toLowerCase().includes(q);
+  });
+}
+// Membentuk link Google Maps dari data lokasi log — mendukung beberapa
+// kemungkinan nama kolom tergantung bagaimana backend menyimpannya.
+function tautanLokasi(l){
+  if(l.LokasiMapsUrl) return l.LokasiMapsUrl;
+  const lat = l.LokasiLat ?? l.Latitude ?? l.lat;
+  const lng = l.LokasiLng ?? l.Longitude ?? l.lng;
+  if(lat && lng) return `https://www.google.com/maps?q=${lat},${lng}`;
+  return null;
+}
+
+// Inisial singkat "Ketepatan" — dipakai di tabel Log & di Export PDF.
+function singkatanKetepatan(k){
+  if(k === 'Telat') return 'T';
+  if(k === 'Tepat Waktu') return 'TW';
+  return '';
+}
+
+function renderLog(){
+  const list = getFilteredLog();
+  document.getElementById('countLog').textContent = list.length + ' BARIS DITEMUKAN';
+  document.getElementById('emptyLog').style.display = list.length? 'none':'block';
+  document.getElementById('bodyLog').innerHTML = list.map(l=>{
+    const d = new Date(l.Timestamp);
+    const tgl = isNaN(d)? l.Timestamp : d.toLocaleDateString('id-ID') + ' (' + d.toLocaleTimeString('id-ID') + ')';
+    const pillClass = l.Status==='MASUK'?'pill-in':(l.Status==='KELUAR'?'pill-out':'pill-izin');
+    const mapsUrl = tautanLokasi(l);
+    const ketepatanPill = l.Ketepatan
+      ? `<span class="pill ${l.Ketepatan==='Telat'?'pill-out':'pill-in'}">${escapeHtml(l.Ketepatan)} (${singkatanKetepatan(l.Ketepatan)})</span>`
+      : '-';
+    return `<tr>
+      <td>${escapeHtml(tgl)}</td>
+      <td>${escapeHtml(l.ID)}</td>
+      <td class="name-strong">${escapeHtml(l.Nama)}</td>
+      <td><span class="pill ${pillClass}">${escapeHtml(l.Status)}</span>${l.Keterangan?`<br><span style="font-size:11px;color:var(--muted);">${escapeHtml(l.Keterangan)}</span>`:''}</td>
+      <td>${ketepatanPill}</td>
+      <td>${l.FotoAbsen? `<a href="${l.FotoAbsen}" target="_blank" class="btn btn-blue">🖼 Lihat</a>`:'-'}</td>
+      <td>${l.FotoBukti? `<a href="${l.FotoBukti}" target="_blank" class="btn btn-orange">📎 Lihat</a>`:'-'}</td>
+      <td>${mapsUrl? `<a href="${mapsUrl}" target="_blank" class="btn btn-green">🗺 Peta</a>`:'-'}</td>
+    </tr>`;
+  }).join('');
+}
+document.getElementById('searchLog').addEventListener('input', renderLog);
+document.getElementById('filterBulan').addEventListener('change', renderLog);
+document.getElementById('filterTahun').addEventListener('change', renderLog);
+document.getElementById('filterKetepatan').addEventListener('change', renderLog);
+
+// -------- Helper: ubah link Google Drive jadi link gambar yang bisa dibaca <canvas> --------
+function extractDriveFileId(url){
+  if(!url) return null;
+  let m = String(url).match(/\/d\/([a-zA-Z0-9_-]{15,})/);
+  if(m) return m[1];
+  m = String(url).match(/[?&]id=([a-zA-Z0-9_-]{15,})/);
+  if(m) return m[1];
+  return null;
+}
+function toViewableImageUrl(url){
+  const id = extractDriveFileId(url);
+  if(id) return `https://lh3.googleusercontent.com/d/${id}=s700`;
+  return url;
+}
+function loadImageAsDataUrl(url){
+  return new Promise((resolve)=>{
+    if(!url){ resolve(null); return; }
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = ()=>{
+      try{
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+        canvas.getContext('2d').drawImage(img,0,0);
+        resolve(canvas.toDataURL('image/jpeg',0.82));
+      }catch(e){ resolve(null); } // gagal baca pixel (biasanya kena batasan CORS)
+    };
+    img.onerror = ()=> resolve(null);
+    img.src = toViewableImageUrl(url);
+  });
+}
+
+// -------- Export Log Absensi ke PDF: Kalender Kehadiran Bulanan per Karyawan --------
+// Tampilan meniru kalender kehadiran (nama hari, tanggal, jam masuk +
+// ketepatan atau kode Izin, dilengkapi foto), disusun jadi 3 blok baris per
+// bulan. Tinggi SETIAP bagian grid bersifat TETAP — tidak tergantung banyak/
+// sedikitnya data hari itu — sehingga 1 karyawan DIJAMIN muat dalam TEPAT
+// 1 halaman, untuk bulan apa pun (28-31 hari) & pegawai mana pun.
+function formatJam(d){
+  return (!d || isNaN(d)) ? '-' : d.toLocaleTimeString('id-ID', { hour:'2-digit', minute:'2-digit' });
+}
+
+// Kode singkat + "jenis" untuk 1 hari Izin, ditebak dari kata kunci pada teks
+// alasannya (Keterangan). Kalau tidak cocok kata kunci apa pun (mis. admin
+// menambah alasan izin baru yang belum dikenali di sini), tetap ditampilkan
+// sebagai "Izin" umum (kode "I") — tidak pernah gagal/error.
+function kodeIzin(keterangan){
+  const t = String(keterangan || '').toLowerCase();
+  if(t.includes('sakit')) return { kode:'S', jenis:'sakit' };
+  if(t.includes('tugas') || t.includes('dinas') || t.includes('lapangan')) return { kode:'TL', jenis:'tugasluar' };
+  return { kode:'I', jenis:'izinlain' };
+}
+// Warna teks status per "jenis" hari — disamakan dengan konvensi warna yang
+// sudah dipakai di tempat lain pada aplikasi ini (Telat=oranye, Alpha=merah,
+// lihat style.css .rekap-telat / .rekap-alpha).
+const WARNA_STATUS_HARI = {
+  tepat:     [46,168,100],
+  telat:     [232,161,58],
+  sakit:     [47,123,209],
+  tugasluar: [31,95,168],
+  izinlain:  [47,123,209],
+  alpha:     [224,69,63],
+  off:       [140,150,163]
+};
+
+async function exportLogPDF(){
+  const bulan = Number(document.getElementById('filterBulan').value);
+  const tahun = Number(document.getElementById('filterTahun').value);
+  if(!bulan || !tahun){
+    showToast('Pilih Bulan & Tahun terlebih dahulu untuk export PDF bulanan');
+    return;
+  }
+  const cari = document.getElementById('searchLog').value.toLowerCase();
+
+  // Ambil semua log pada Bulan & Tahun terpilih. Filter pencarian nama/ID
+  // tetap dipakai supaya bisa export 1 karyawan saja.
+  const logBulanIni = logCache.filter(l=>{
+    const d = new Date(l.Timestamp);
+    if(isNaN(d) || (d.getMonth()+1) !== bulan || d.getFullYear() !== tahun) return false;
+    return String(l.Nama).toLowerCase().includes(cari) || String(l.ID).toLowerCase().includes(cari);
+  });
+  if(!logBulanIni.length){ showToast('Tidak ada data pada Bulan/Tahun & pencarian ini'); return; }
+
+  // Kelompokkan per pegawai (ID + Nama), urut berdasarkan nama
+  const perPegawai = new Map();
+  logBulanIni.forEach(l=>{
+    const key = String(l.ID) + '||' + l.Nama;
+    if(!perPegawai.has(key)) perPegawai.set(key, { id:l.ID, nama:l.Nama, rows:[] });
+    perPegawai.get(key).rows.push(l);
+  });
+  const daftarPegawai = [...perPegawai.values()].sort((a,b)=> String(a.nama).localeCompare(String(b.nama)));
+
+  const btn = document.getElementById('btnExportLogPdf');
+  const originalText = btn.textContent;
+  btn.disabled = true; btn.textContent = '⏳ Menyiapkan PDF...';
+
+  try{
+    // Ambil total rekap resmi (sama seperti tab Rekap Bulanan) supaya angka
+    // Tepat Waktu/Telat/Izin/Alpha di PDF konsisten dengan halaman lain.
+    let rekapData = { totalHariKerja: 0, data: [] };
+    try{
+      const res = await fetch(`${API_URL}?action=getRekapBulanan&bulan=${bulan}&tahun=${tahun}`);
+      const json = await res.json();
+      if(json.ok && json.data) rekapData = json.data;
+    }catch(e){ /* kalau gagal, ringkasan dihitung manual dari grid kalender di bawah */ }
+    const rekapPerId = new Map((rekapData.data||[]).map(r=> [String(r.ID), r]));
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit:'mm', format:'a4' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 12;
+    const usableWidth = pageWidth - margin*2;
+    const namaBulan = BULAN_NAMA[bulan-1];
+    const jumlahHari = new Date(tahun, bulan, 0).getDate();
+    const hariIni = new Date(); hariIni.setHours(0,0,0,0);
+
+    // Selalu 3 blok baris (gaya kalender kehadiran), berapa pun jumlah hari
+    // dalam bulan (28-31 hari) — supaya lebar kolom & tinggi grid konsisten
+    // dan pasti muat 1 halaman per pegawai.
+    const JUMLAH_BLOK = 3;
+    const kolomPerBlok = Math.ceil(jumlahHari / JUMLAH_BLOK);
+    const colWidth = usableWidth / kolomPerBlok;
+    const photoSize = Math.min(colWidth - 2.5, 19);
+
+    // Tinggi tiap bagian grid TETAP (tidak tergantung isi data pegawai),
+    // supaya total tinggi 1 halaman bisa dipastikan muat di kertas A4.
+    const T_LABEL = 6, T_HARI = 5, T_TGL = 5.5, T_STATUS = 5.5;
+    const T_FOTO = photoSize + 2.5;
+    const T_CATATAN = 6.5;
+    const T_BLOK = T_LABEL + T_HARI + T_TGL + T_STATUS + T_FOTO + T_CATATAN;
+
+    for (let pegawaiIndex = 0; pegawaiIndex < daftarPegawai.length; pegawaiIndex++) {
+      const { id, nama, rows } = daftarPegawai[pegawaiIndex];
+      if(pegawaiIndex > 0) doc.addPage();
+
+      // ---- Kumpulkan log milik pegawai ini per tanggal ----
+      const logPerTanggal = new Map();
+      rows.forEach(l=>{
+        const d = new Date(l.Timestamp);
+        if(isNaN(d)) return;
+        const tgl = d.getDate();
+        if(!logPerTanggal.has(tgl)) logPerTanggal.set(tgl, { masuk:null, masukFoto:'', ketepatan:'', izin:[] });
+        const h = logPerTanggal.get(tgl);
+        if(l.Status === 'MASUK'){ h.masuk = d; h.ketepatan = l.Ketepatan || ''; h.masukFoto = l.FotoAbsen || ''; }
+        else if(l.Status === 'IZIN'){ h.izin.push(l); }
+      });
+
+      // ---- Susun 1 sel per tanggal, TERMASUK hari tanpa data (libur/alpha) ----
+      const dataHari = [];
+      for(let d = 1; d <= jumlahHari; d++){
+        const tanggal = new Date(tahun, bulan-1, d);
+        const info = logPerTanggal.get(d);
+        const dow = tanggal.getDay(); // 0=Minggu .. 6=Sabtu
+        const isWeekend = (dow === 0 || dow === 6);
+        let kode = '-', jenis = 'off', fotoUrl = '', catatan = '';
+        if(info && info.masuk){
+          jenis = info.ketepatan === 'Telat' ? 'telat' : 'tepat';
+          kode = `${formatJam(info.masuk)} - ${singkatanKetepatan(info.ketepatan) || 'TW'}`;
+          fotoUrl = info.masukFoto;
+        } else if(info && info.izin.length){
+          const iz = info.izin[0];
+          const ki = kodeIzin(iz.Keterangan);
+          kode = ki.kode; jenis = ki.jenis;
+          fotoUrl = iz.FotoBukti || '';
+          catatan = iz.Keterangan || '';
+        } else if(!isWeekend && tanggal <= hariIni){
+          // Hari kerja yang sudah lewat tanpa MASUK maupun IZIN = Alpha,
+          // sama seperti definisi TotalAlpha di getRekapBulanan (Code.gs).
+          kode = 'A'; jenis = 'alpha';
+        }
+        dataHari.push({ tanggal, kode, jenis, fotoUrl, catatan });
+      }
+
+      // ---- Muat semua foto hari ini sekaligus & PARALEL (jauh lebih cepat
+      // daripada memuat satu-satu, penting karena kini bisa sampai ~31 foto
+      // per pegawai, bukan cuma beberapa foto bukti izin seperti sebelumnya) ----
+      const fotoDataUrls = await Promise.all(
+        dataHari.map(h => h.fotoUrl ? loadImageAsDataUrl(h.fotoUrl) : Promise.resolve(null))
+      );
+
+      // ---- Header halaman ----
+      let y = 15;
+      doc.setFont('helvetica','bold'); doc.setFontSize(12.5); doc.setTextColor(20);
+      doc.text('REKAP KEHADIRAN BULANAN — BPBD PROVINSI KALIMANTAN SELATAN', pageWidth/2, y, { align:'center' });
+      y += 6.5;
+      doc.setFontSize(11);
+      doc.text(`${nama}  (ID: ${id})`, margin, y);
+      y += 5;
+      doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(110);
+      doc.text(`Periode: ${namaBulan} ${tahun}   |   Dicetak: ${new Date().toLocaleString('id-ID')}`, margin, y);
+      y += 5;
+      doc.setFontSize(6.8); doc.setTextColor(130);
+      doc.text('Kode: TW = Tepat Waktu, T = Telat, I = Izin, S = Sakit, TL = Tugas Luar / Dinas Luar, A = Alpha (tanpa keterangan)', margin, y);
+      doc.setTextColor(20);
+      y += 5;
+
+      // ---- Gambar 3 blok kalender ----
+      for(let b = 0; b < JUMLAH_BLOK; b++){
+        const mulai = b*kolomPerBlok + 1;
+        if(mulai > jumlahHari) break;
+        const akhir = Math.min(mulai + kolomPerBlok - 1, jumlahHari);
+        const kolomBlokIni = akhir - mulai + 1;
+        const lebarBlok = colWidth * kolomBlokIni;
+
+        // Bar label blok
+        doc.setFillColor(232,161,58);
+        doc.rect(margin, y, lebarBlok, T_LABEL, 'F');
+        doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.setFontSize(8);
+        doc.text(`Hari / Tanggal  (${mulai}–${akhir})`, margin + lebarBlok/2, y + T_LABEL/2 + 1.3, { align:'center' });
+        doc.setTextColor(20);
+        const yBlok = y + T_LABEL;
+
+        for(let k = 0; k < kolomBlokIni; k++){
+          const d = mulai + k;
+          const h = dataHari[d-1];
+          const xKol = margin + colWidth*k;
+          const warna = WARNA_STATUS_HARI[h.jenis] || WARNA_STATUS_HARI.off;
+
+          // Nama hari
+          doc.setFillColor(200,230,193);
+          doc.rect(xKol, yBlok, colWidth, T_HARI, 'F');
+          doc.setFont('helvetica','bold'); doc.setFontSize(6.2); doc.setTextColor(20);
+          doc.text(h.tanggal.toLocaleDateString('id-ID',{weekday:'long'}), xKol + colWidth/2, yBlok + T_HARI/2 + 1, { align:'center' });
+
+          // Nomor tanggal
+          doc.setFillColor(255,255,255);
+          doc.rect(xKol, yBlok+T_HARI, colWidth, T_TGL, 'F');
+          doc.setFontSize(7.5);
+          doc.text(String(d).padStart(2,'0'), xKol + colWidth/2, yBlok+T_HARI+T_TGL/2+1.2, { align:'center' });
+
+          // Status / kode hari
+          doc.setFillColor(248,250,252);
+          doc.rect(xKol, yBlok+T_HARI+T_TGL, colWidth, T_STATUS, 'F');
+          doc.setFont('helvetica','bold'); doc.setFontSize(6.3);
+          doc.setTextColor(warna[0],warna[1],warna[2]);
+          doc.text(h.kode, xKol + colWidth/2, yBlok+T_HARI+T_TGL+T_STATUS/2+1, { align:'center' });
+          doc.setTextColor(20); doc.setFont('helvetica','normal');
+
+          // Foto (foto absen MASUK, atau foto bukti Izin kalau pegawai melampirkannya)
+          const yFoto = yBlok+T_HARI+T_TGL+T_STATUS;
+          const fotoDataUrl = fotoDataUrls[d-1];
+          if(fotoDataUrl){
+            try{ doc.addImage(fotoDataUrl,'JPEG', xKol+(colWidth-photoSize)/2, yFoto+1.2, photoSize, photoSize); }catch(e){}
+          }
+
+          // Catatan Izin (maks 2 baris, font sangat kecil, hanya kalau ada)
+          if(h.catatan){
+            const yCatatan = yFoto + T_FOTO;
+            doc.setFontSize(5.2); doc.setTextColor(80,100,150);
+            const baris = doc.splitTextToSize(h.catatan, colWidth - 1.5).slice(0,2);
+            doc.text(baris, xKol + colWidth/2, yCatatan+2.2, { align:'center' });
+            doc.setTextColor(20);
+          }
+
+          // Garis pembatas kolom
+          doc.setDrawColor(225);
+          doc.line(xKol, y, xKol, y+T_BLOK);
+        }
+        doc.setDrawColor(225);
+        doc.line(margin+lebarBlok, y, margin+lebarBlok, y+T_BLOK);
+        doc.line(margin, y+T_BLOK, margin+lebarBlok, y+T_BLOK);
+
+        y += T_BLOK + 4;
+      }
+
+      // ---- Ringkasan total di bagian bawah (konsisten dgn tab Rekap Bulanan) ----
+      const rekapPegawai = rekapPerId.get(String(id));
+      let totalTepat, totalTelat, totalIzin, totalAlpha;
+      if(rekapPegawai){
+        totalTepat = rekapPegawai.TotalTepatWaktu; totalTelat = rekapPegawai.TotalTelat;
+        totalIzin = rekapPegawai.TotalIzin; totalAlpha = rekapPegawai.TotalAlpha;
+      } else {
+        // fallback: hitung manual dari grid kalender kalau pegawai tidak ada di rekap
+        totalTepat = dataHari.filter(h=>h.jenis==='tepat').length;
+        totalTelat = dataHari.filter(h=>h.jenis==='telat').length;
+        totalIzin = dataHari.filter(h=>['sakit','tugasluar','izinlain'].includes(h.jenis)).length;
+        totalAlpha = dataHari.filter(h=>h.jenis==='alpha').length;
+      }
+      const totalSakit = dataHari.filter(h=>h.jenis==='sakit').length;
+      const totalTugasLuar = dataHari.filter(h=>h.jenis==='tugasluar').length;
+
+      doc.setDrawColor(225); doc.setFillColor(246,248,251);
+      doc.roundedRect(margin, y, usableWidth, 21, 2, 2, 'FD');
+      doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(20);
+      doc.text(`Tepat Waktu : ${totalTepat}     Terlambat : ${totalTelat}     Izin : ${totalIzin}`, margin + 4, y + 8.5);
+      doc.text(`Sakit : ${totalSakit}     Tugas Luar/Dinas Luar : ${totalTugasLuar}     Alpha : ${totalAlpha}` +
+        (rekapData.totalHariKerja ? `     Hari Kerja : ${rekapData.totalHariKerja}` : ''), margin + 4, y + 15.5);
+      doc.setFont('helvetica','normal');
+    }
+
+    const namaFile = 'Rekap_Kalender_Kehadiran_BPBD_' + namaBulan + '_' + tahun + (cari ? '_' + cari.replace(/[^a-z0-9]+/gi,'_') : '') + '.pdf';
+    doc.save(namaFile);
+  } finally {
+    btn.disabled = false; btn.textContent = originalText;
+  }
+}
+
+// ================= OPSI IZIN =================
+let izinCache = [];
+async function loadIzin(){
+  document.getElementById('bodyIzin').innerHTML = '<tr><td colspan="3" class="loading">Memuat data...</td></tr>';
+  try{
+    const res = await fetch(`${API_URL}?action=getOpsiIzin`);
+    const json = await res.json();
+    izinCache = json.data || [];
+    renderIzin();
+  }catch(e){
+    document.getElementById('bodyIzin').innerHTML = '<tr><td colspan="3" class="loading">Gagal memuat data. Cek API_URL di config.js</td></tr>';
+  }
+}
+function renderIzin(){
+  document.getElementById('countIzin').textContent = izinCache.length + ' OPSI';
+  document.getElementById('emptyIzin').style.display = izinCache.length? 'none':'block';
+  document.getElementById('bodyIzin').innerHTML = izinCache.map((o,i)=>`
+    <tr>
+      <td>Baris ${i+1}</td>
+      <td class="name-strong">${escapeHtml(o.Teks)}</td>
+      <td>
+        <button class="btn btn-orange" onclick='editIzin(${o._row})'>✏ Edit</button>
+        <button class="btn btn-red" onclick='hapusIzin(${o._row})'>🗑 Hapus</button>
+      </td>
+    </tr>`).join('');
+}
+function editIzin(row){
+  const o = izinCache.find(x=>x._row===row);
+  if(!o) return;
+  document.getElementById('izinRow').value = row;
+  document.getElementById('izinTeks').value = o.Teks;
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+async function hapusIzin(row){
+  if(!confirm('Hapus opsi izin ini?')) return;
+  try{
+    const res = await fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({action:'deleteOpsiIzin', row})});
+    const json = await res.json();
+    if(json.ok){ showToast('Opsi izin dihapus'); loadIzin(); }
+    else { showToast('Gagal: ' + (json.error || 'terjadi kesalahan')); }
+  }catch(e){ showToast('Gagal menghubungi server'); }
+}
+document.getElementById('btnSaveIzin').onclick = async ()=>{
+  const teks = document.getElementById('izinTeks').value.trim();
+  if(!teks){ showToast('Teks izin wajib diisi'); return; }
+  const row = document.getElementById('izinRow').value;
+  const payload = { action: row? 'updateOpsiIzin':'addOpsiIzin', row: row? Number(row): undefined, teks };
+  const btn = document.getElementById('btnSaveIzin');
+  btn.disabled = true;
+  try{
+    const res = await fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body: JSON.stringify(payload)});
+    const json = await res.json();
+    if(json.ok){
+      showToast(row? 'Opsi izin diperbarui':'Opsi izin ditambahkan');
+      document.getElementById('izinTeks').value=''; document.getElementById('izinRow').value='';
+      loadIzin();
+    } else {
+      showToast('Gagal: ' + (json.error || 'terjadi kesalahan'));
+    }
+  }catch(e){
+    showToast('Gagal menghubungi server');
+  } finally {
+    btn.disabled = false;
+  }
+};
+
+// Catatan: loadPegawai(), loadLog(), dan loadIzin() sengaja TIDAK dipanggil
+// di sini lagi — sekarang baru dipanggil dari showApp() setelah admin
+// berhasil login (lihat bagian "LOGIN ADMIN" di atas).
+
+// ================= LOKASI ABSEN (GEOFENCING) =================
+const geoAktif = document.getElementById('geoAktif');
+const geoLat = document.getElementById('geoLat');
+const geoLng = document.getElementById('geoLng');
+const geoRadius = document.getElementById('geoRadius');
+const geoMapBox = document.getElementById('geoMapBox');
+const geoMap = document.getElementById('geoMap');
+const geoMapInfo = document.getElementById('geoMapInfo');
+const geoStatusMsg = document.getElementById('geoStatusMsg');
+
+function tampilkanPetaGeo(){
+  const lat = parseFloat(geoLat.value), lng = parseFloat(geoLng.value);
+  if(!isFinite(lat) || !isFinite(lng)){ geoMapBox.style.display = 'none'; return; }
+  const d = 0.003;
+  const bbox = `${lng-d},${lat-d},${lng+d},${lat+d}`;
+  geoMap.src = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&marker=${lat},${lng}`;
+  geoMapInfo.textContent = `Pratinjau titik lokasi kantor: ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+  geoMapBox.style.display = 'block';
+}
+geoLat.addEventListener('change', tampilkanPetaGeo);
+geoLng.addEventListener('change', tampilkanPetaGeo);
+
+async function loadPengaturanLokasi(){
+  try{
+    const res = await fetch(`${API_URL}?action=getPengaturanLokasi`);
+    const json = await res.json();
+    if(!json.ok || !json.data) return;
+    const p = json.data;
+    geoAktif.checked = !!p.geofenceAktif;
+    geoLat.value = p.lokasiLat ?? '';
+    geoLng.value = p.lokasiLng ?? '';
+    geoRadius.value = p.radiusMeter ?? 100;
+    tampilkanPetaGeo();
+  }catch(e){
+    geoStatusMsg.innerHTML = '<span class="status-err">Gagal memuat pengaturan lokasi. Cek API_URL di config.js</span>';
+  }
+}
+
+document.getElementById('btnGeoGunakanLokasiSaya').onclick = () => {
+  if(!navigator.geolocation){
+    showToast('Perangkat/browser ini tidak mendukung GPS');
+    return;
+  }
+  const btn = document.getElementById('btnGeoGunakanLokasiSaya');
+  const asli = btn.textContent;
+  btn.disabled = true; btn.textContent = '📡 Mengambil lokasi perangkat...';
+  navigator.geolocation.getCurrentPosition(
+    (pos)=>{
+      geoLat.value = pos.coords.latitude.toFixed(6);
+      geoLng.value = pos.coords.longitude.toFixed(6);
+      tampilkanPetaGeo();
+      btn.disabled = false; btn.textContent = asli;
+      showToast('Lokasi perangkat ini berhasil diambil — jangan lupa klik Simpan');
+    },
+    ()=>{
+      btn.disabled = false; btn.textContent = asli;
+      showToast('Gagal mengambil lokasi. Pastikan izin GPS diizinkan.');
+    },
+    { enableHighAccuracy:true, timeout:10000, maximumAge:0 }
+  );
+};
+
+document.getElementById('btnSimpanGeo').onclick = async () => {
+  const aktif = geoAktif.checked;
+  const payload = {
+    action: 'simpanPengaturanLokasi',
+    aktif,
+    lat: geoLat.value !== '' ? Number(geoLat.value) : undefined,
+    lng: geoLng.value !== '' ? Number(geoLng.value) : undefined,
+    radius: geoRadius.value !== '' ? Number(geoRadius.value) : undefined
+  };
+  const btn = document.getElementById('btnSimpanGeo');
+  btn.disabled = true;
+  geoStatusMsg.textContent = '';
+  try{
+    const res = await fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body: JSON.stringify(payload)});
+    const json = await res.json();
+    if(json.ok){
+      geoStatusMsg.innerHTML = '<span class="status-ok">Pengaturan lokasi tersimpan</span>';
+      showToast('Pengaturan lokasi absen tersimpan');
+    } else {
+      geoStatusMsg.innerHTML = '<span class="status-err">Gagal: ' + escapeHtml(json.error||'terjadi kesalahan') + '</span>';
+    }
+  }catch(e){
+    geoStatusMsg.innerHTML = '<span class="status-err">Gagal menghubungi server</span>';
+  } finally {
+    btn.disabled = false;
+  }
+};
+
+// ================= JAM MASUK (TELAT / TEPAT WAKTU) =================
+const jamBatasInput = document.getElementById('jamBatas');
+const jamBatasPagiInput = document.getElementById('jamBatasPagi');
+const jamBatasMalamInput = document.getElementById('jamBatasMalam');
+const jamStatusMsg = document.getElementById('jamStatusMsg');
+
+async function loadPengaturanWaktu(){
+  try{
+    const res = await fetch(`${API_URL}?action=getPengaturanWaktu`);
+    const json = await res.json();
+    if(json.ok && json.data){
+      jamBatasInput.value = json.data.jamBatasTelat || '08:00:01';
+      jamBatasPagiInput.value = json.data.jamBatasTelatPiketPagi || '08:00:01';
+      jamBatasMalamInput.value = json.data.jamBatasTelatPiketMalam || '19:00:01';
+    }
+  }catch(e){
+    jamStatusMsg.innerHTML = '<span class="status-err">Gagal memuat pengaturan jam. Cek API_URL di config.js</span>';
+  }
+}
+
+document.getElementById('btnSimpanJam').onclick = async () => {
+  const jamBatasTelat = jamBatasInput.value.trim();
+  const jamBatasTelatPiketPagi = jamBatasPagiInput.value.trim();
+  const jamBatasTelatPiketMalam = jamBatasMalamInput.value.trim();
+  const polaJam = /^([01]\d|2[0-3]):([0-5]\d):([0-5]\d)$/;
+  if(!polaJam.test(jamBatasTelat) || !polaJam.test(jamBatasTelatPiketPagi) || !polaJam.test(jamBatasTelatPiketMalam)){
+    jamStatusMsg.innerHTML = '<span class="status-err">Format jam tidak valid. Gunakan format JJ:MM:DD di ketiga kolom, contoh 08:00:01</span>';
+    return;
+  }
+  const btn = document.getElementById('btnSimpanJam');
+  btn.disabled = true;
+  jamStatusMsg.textContent = '';
+  try{
+    const res = await fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({action:'simpanPengaturanWaktu', jamBatasTelat, jamBatasTelatPiketPagi, jamBatasTelatPiketMalam})});
+    const json = await res.json();
+    if(json.ok){
+      jamStatusMsg.innerHTML = '<span class="status-ok">Batas jam masuk tersimpan</span>';
+      showToast('Batas jam masuk tersimpan');
+    } else {
+      jamStatusMsg.innerHTML = '<span class="status-err">Gagal: ' + escapeHtml(json.error||'terjadi kesalahan') + '</span>';
+    }
+  }catch(e){
+    jamStatusMsg.innerHTML = '<span class="status-err">Gagal menghubungi server</span>';
+  } finally {
+    btn.disabled = false;
+  }
+};
+
+// ---------- Tombol refresh melayang (fitur dari admin_1.html) ----------
+// Berguna khususnya di panel admin ini karena tabel pegawai, log absensi, dan
+// pengaturan bisa berubah kapan saja di spreadsheet — tombol ini memuat ulang
+// seluruh halaman supaya semua data & status login kembali segar tanpa perlu
+// mencari tombol refresh browser.
+document.getElementById('refreshBtn').addEventListener('click', () => {
+  const btn = document.getElementById('refreshBtn');
+  btn.classList.add('spinning');
+  setTimeout(() => location.reload(), 400);
+});
+</script>
+</body>
+</html>

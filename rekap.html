@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0f2647">
+<title>Rekap Bulanan Pegawai — BPBD Kalimantan Selatan</title>
+<link rel="icon" href="https://avatars.githubusercontent.com/u/295258675?v=4" />
+<link rel="stylesheet" href="style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  .login-gate{
+    position:fixed;inset:0;z-index:9999;display:none;
+    align-items:center;justify-content:center;
+    background:#eef2f7;padding:16px;
+  }
+  .login-box{
+    width:100%;max-width:360px;background:#fff;border-radius:16px;
+    padding:28px 24px 24px;text-align:center;
+    box-shadow:0 10px 30px rgba(15,38,71,0.12);
+  }
+  .login-box label{display:block;text-align:left;margin-top:14px;font-size:13px;color:var(--muted);}
+  .login-box label:first-of-type{margin-top:18px;}
+  .login-box input{font-size:16px;}
+  .login-sub{color:var(--muted);font-size:12px;margin:6px 0 0;}
+  .login-msg{min-height:18px;font-size:13px;margin-top:12px;}
+  .status-ok{color:var(--green);font-weight:700;}
+  .status-err{color:var(--red);font-weight:700;}
+
+  .rekap-alpha{color:var(--red);font-weight:700;}
+  .rekap-telat{color:var(--orange);font-weight:700;}
+  .rekap-info{
+    background:#eaf1fb;border-radius:12px;padding:10px 14px;
+    font-size:12px;color:var(--blue-dark);margin-bottom:14px;
+  }
+  .rekap-toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:4px;}
+  .rekap-toolbar select{flex:1;min-width:120px;margin:0;}
+
+  /* ---- Tombol Refresh Melayang (fitur dari admin_1.html / index_1.html) ---- */
+  .refresh-btn{
+    position:fixed;
+    bottom:20px;right:20px;
+    width:50px;height:50px;
+    background-color:#ff6b00;
+    color:#fff;
+    border:none;
+    border-radius:50%;
+    box-shadow:0 4px 10px rgba(0,0,0,.3);
+    cursor:pointer;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    font-size:24px;
+    z-index:9999;
+    transition:transform .2s, background-color .2s;
+  }
+  .refresh-btn:active{transform:scale(.9);background-color:#e05e00;}
+  .spinning{animation:spin .8s ease-in-out;}
+  @keyframes spin{
+    0%{transform:rotate(0deg);}
+    100%{transform:rotate(360deg);}
+  }
+</style>
+</head>
+<body>
+<button class="refresh-btn" id="refreshBtn" type="button" title="Muat ulang aplikasi">🔄</button>
+
+<div id="loginGate" class="login-gate">
+  <div class="login-box">
+    <div class="logos">🛡️🔺</div>
+    <h1 style="font-size:16px;">REKAP BULANAN PEGAWAI</h1>
+    <h2 style="font-size:11px;">BPBD PROVINSI KALIMANTAN SELATAN</h2>
+    <p class="login-sub">Halaman ini khusus untuk admin yang berwenang.</p>
+
+    <label>Username</label>
+    <input type="text" id="loginUser" autocomplete="username" placeholder="Username">
+
+    <label>Password</label>
+    <input type="password" id="loginPass" autocomplete="current-password" placeholder="Password">
+
+    <button class="btn btn-blue btn-block" id="btnLogin" type="button" style="margin-top:16px;">🔒 Masuk</button>
+    <div class="login-msg" id="loginMsg"></div>
+  </div>
+</div>
+
+<div class="wrap" id="appWrap" style="display:none;">
+  <div class="header">
+    <div class="logos">🛡️🔺</div>
+    <h1>REKAP BULANAN PEGAWAI</h1>
+    <h2>BPBD PROVINSI KALIMANTAN SELATAN</h2>
+    <button type="button" id="btnLogout" class="btn btn-outline" style="margin-top:10px;padding:6px 14px;font-size:12px;">🚪 Keluar</button>
+  </div>
+
+  <div class="rekap-info" id="rekapInfo">Memuat rekap...</div>
+
+  <div class="rekap-toolbar">
+    <select id="filterBulan"></select>
+    <select id="filterTahun"></select>
+    <input type="text" id="searchRekap" placeholder="Cari nama / ID pegawai..." style="flex:1.4;min-width:160px;">
+  </div>
+  <button class="btn btn-blue" id="btnExportRekapPdf" style="margin:10px 0 4px;">📄 Export Rekap ke PDF</button>
+
+  <div class="section-title">
+    📊 REKAP KEHADIRAN PER PEGAWAI
+    <span class="badge" id="countRekap">0 ORANG</span>
+  </div>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th><th>Nama Pegawai</th><th>Jabatan</th><th>Piket</th>
+          <th>Masuk</th><th>Tepat Waktu</th><th>Telat</th><th>Izin</th><th>Alpha</th>
+        </tr>
+      </thead>
+      <tbody id="bodyRekap"></tbody>
+    </table>
+  </div>
+  <div class="empty" id="emptyRekap" style="display:none;">Belum ada data pegawai.</div>
+
+  <a href="admin.html" class="btn btn-outline btn-block" style="margin-top:18px;text-decoration:none;">← KEMBALI KE PANEL ADMIN</a>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="admin-config.js"></script>
+<script src="config.js"></script>
+<script>
+const toastEl = document.getElementById('toast');
+function showToast(msg){ toastEl.textContent = msg; toastEl.classList.add('show'); setTimeout(()=>toastEl.classList.remove('show'),2200); }
+
+const BULAN_NAMA = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+
+function escapeHtml(str){
+  const div = document.createElement('div');
+  div.textContent = (str===undefined || str===null) ? '' : String(str);
+  return div.innerHTML;
+}
+
+// ================= LOGIN ADMIN =================
+// Sama persis dengan gerbang login di admin.html, dan sengaja memakai
+// SESSION_KEY yang SAMA — supaya kalau admin sudah login di admin.html lalu
+// membuka rekap.html di tab yang sama, tidak perlu login ulang. Kredensial
+// tetap diverifikasi oleh SERVER (action "adminLogin" di Code.gs).
+const SESSION_KEY = 'bpbd_admin_session';
+const ATTEMPT_KEY = 'bpbd_admin_attempts';
+const MAX_PERCOBAAN = 5;
+const LOCKOUT_MS = 60000;
+
+function getSession(){
+  try{ return JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null'); }catch(e){ return null; }
+}
+function isLoggedIn(){
+  const s = getSession();
+  return !!s && Date.now() < s.expires;
+}
+function startSession(username){
+  const jamSesi = (typeof ADMIN_SESSION_HOURS !== 'undefined') ? ADMIN_SESSION_HOURS : 8;
+  sessionStorage.setItem(SESSION_KEY, JSON.stringify({ username, expires: Date.now() + jamSesi*60*60*1000 }));
+}
+function endSession(){ sessionStorage.removeItem(SESSION_KEY); }
+
+function getAttempts(){
+  try{ return JSON.parse(sessionStorage.getItem(ATTEMPT_KEY) || 'null') || {count:0, lockUntil:0}; }catch(e){ return {count:0, lockUntil:0}; }
+}
+function setAttempts(a){ sessionStorage.setItem(ATTEMPT_KEY, JSON.stringify(a)); }
+
+function showApp(){
+  document.getElementById('loginGate').style.display = 'none';
+  document.getElementById('appWrap').style.display = 'block';
+  loadRekap();
+}
+
+async function tryLogin(){
+  const msg = document.getElementById('loginMsg');
+  const attempts = getAttempts();
+  if(Date.now() < attempts.lockUntil){
+    const sisaDetik = Math.ceil((attempts.lockUntil - Date.now())/1000);
+    msg.innerHTML = `<span class="status-err">Terlalu banyak percobaan gagal. Coba lagi dalam ${sisaDetik} detik.</span>`;
+    return;
+  }
+  const username = document.getElementById('loginUser').value.trim();
+  const password = document.getElementById('loginPass').value;
+  if(!username || !password){
+    msg.innerHTML = '<span class="status-err">Username dan password wajib diisi</span>';
+    return;
+  }
+
+  const btn = document.getElementById('btnLogin');
+  btn.disabled = true; btn.textContent = '⏳ Memeriksa...';
+
+  let valid = false;
+  let pesanError = 'Tidak dapat menghubungi server. Cek koneksi / API_URL.';
+  try{
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'adminLogin', username, password })
+    });
+    const json = await res.json();
+    valid = !!json.ok;
+    if(!valid && json.error) pesanError = json.error;
+  }catch(e){ valid = false; }
+
+  btn.disabled = false; btn.textContent = '🔒 Masuk';
+
+  if(valid){
+    setAttempts({count:0, lockUntil:0});
+    startSession(username);
+    document.getElementById('loginPass').value = '';
+    showApp();
+  } else {
+    const count = attempts.count + 1;
+    const lockUntil = count >= MAX_PERCOBAAN ? Date.now() + LOCKOUT_MS : 0;
+    setAttempts({ count: lockUntil ? 0 : count, lockUntil });
+    msg.innerHTML = lockUntil
+      ? `<span class="status-err">Terlalu banyak percobaan gagal. Coba lagi dalam ${LOCKOUT_MS/1000} detik.</span>`
+      : `<span class="status-err">${escapeHtml(pesanError)}</span>`;
+  }
+}
+
+document.getElementById('btnLogin').onclick = tryLogin;
+document.getElementById('loginPass').addEventListener('keydown', e=>{ if(e.key==='Enter') tryLogin(); });
+document.getElementById('loginUser').addEventListener('keydown', e=>{ if(e.key==='Enter') document.getElementById('loginPass').focus(); });
+document.getElementById('btnLogout').addEventListener('click', ()=>{
+  endSession();
+  location.reload();
+});
+
+if(isLoggedIn()){
+  showApp();
+} else {
+  document.getElementById('loginGate').style.display = 'flex';
+}
+
+// ================= REKAP BULANAN =================
+const filterBulanEl = document.getElementById('filterBulan');
+const filterTahunEl = document.getElementById('filterTahun');
+const now = new Date();
+
+function isiFilterBulanTahun(){
+  BULAN_NAMA.forEach((b,i)=>{ const o=document.createElement('option'); o.value=i+1; o.textContent=b; filterBulanEl.appendChild(o); });
+  filterBulanEl.value = now.getMonth()+1;
+  // 3 tahun ke belakang s/d tahun berjalan, cukup untuk rekap bulanan
+  for(let y = now.getFullYear(); y >= now.getFullYear()-3; y--){
+    const o = document.createElement('option'); o.value = y; o.textContent = y;
+    filterTahunEl.appendChild(o);
+  }
+  filterTahunEl.value = now.getFullYear();
+}
+isiFilterBulanTahun();
+
+let rekapCache = { bulan:null, tahun:null, totalHariKerja:0, data:[] };
+
+async function loadRekap(){
+  const body = document.getElementById('bodyRekap');
+  body.innerHTML = '<tr><td colspan="9" class="loading">Memuat rekap...</td></tr>';
+  const bulan = filterBulanEl.value;
+  const tahun = filterTahunEl.value;
+  try{
+    const res = await fetch(`${API_URL}?action=getRekapBulanan&bulan=${bulan}&tahun=${tahun}`);
+    const json = await res.json();
+    if(json.ok){
+      rekapCache = json.data;
+      renderRekap();
+    } else {
+      body.innerHTML = `<tr><td colspan="9" class="loading">Gagal memuat rekap: ${escapeHtml(json.error||'')}</td></tr>`;
+    }
+  }catch(e){
+    body.innerHTML = '<tr><td colspan="9" class="loading">Gagal menghubungi server. Cek API_URL di config.js</td></tr>';
+  }
+}
+
+function badgePiket(piket){
+  const p = piket || 'Tidak Piket';
+  if(p === 'Piket Pagi') return `<span class="pill pill-in">${escapeHtml(p)}</span>`;
+  if(p === 'Piket Malam') return `<span class="pill pill-izin">${escapeHtml(p)}</span>`;
+  return `<span class="badge">${escapeHtml(p)}</span>`;
+}
+function renderRekap(){
+  const q = document.getElementById('searchRekap').value.toLowerCase();
+  const list = (rekapCache.data||[]).filter(r =>
+    String(r.Nama).toLowerCase().includes(q) || String(r.ID).toLowerCase().includes(q)
+  );
+  const namaBulan = BULAN_NAMA[(rekapCache.bulan||1)-1];
+  document.getElementById('rekapInfo').textContent =
+    `Menampilkan rekap ${namaBulan} ${rekapCache.tahun} — total hari kerja yang sudah dihitung: ${rekapCache.totalHariKerja} hari (Senin-Jumat).`;
+  document.getElementById('countRekap').textContent = list.length + ' ORANG';
+  document.getElementById('emptyRekap').style.display = list.length? 'none':'block';
+  document.getElementById('bodyRekap').innerHTML = list.map(r => `
+    <tr>
+      <td>${escapeHtml(r.ID)}</td>
+      <td class="name-strong">${escapeHtml(r.Nama)}</td>
+      <td>${escapeHtml(r.Jabatan)}</td>
+      <td>${badgePiket(r.Piket)}</td>
+      <td>${r.TotalMasuk}</td>
+      <td>${r.TotalTepatWaktu}</td>
+      <td class="${r.TotalTelat>0?'rekap-telat':''}">${r.TotalTelat}</td>
+      <td>${r.TotalIzin}</td>
+      <td class="${r.TotalAlpha>0?'rekap-alpha':''}">${r.TotalAlpha}</td>
+    </tr>
+  `).join('');
+}
+
+filterBulanEl.addEventListener('change', loadRekap);
+filterTahunEl.addEventListener('change', loadRekap);
+document.getElementById('searchRekap').addEventListener('input', renderRekap);
+
+// -------- Export Rekap ke PDF --------
+async function exportRekapPDF(){
+  const q = document.getElementById('searchRekap').value.toLowerCase();
+  const list = (rekapCache.data||[]).filter(r =>
+    String(r.Nama).toLowerCase().includes(q) || String(r.ID).toLowerCase().includes(q)
+  );
+  if(!list.length){ showToast('Tidak ada data untuk diekspor'); return; }
+
+  const btn = document.getElementById('btnExportRekapPdf');
+  btn.disabled = true; btn.textContent = '⏳ Menyiapkan PDF...';
+  try{
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit:'mm', format:'a4' });
+    const margin = 14;
+    let y = 16;
+
+    doc.setFontSize(13); doc.setFont(undefined,'bold');
+    doc.text('REKAP BULANAN KEHADIRAN PEGAWAI', margin, y);
+    doc.setFontSize(10); doc.setFont(undefined,'normal');
+    y += 6;
+    doc.text('BPBD Provinsi Kalimantan Selatan', margin, y);
+    y += 6;
+    const namaBulan = BULAN_NAMA[(rekapCache.bulan||1)-1];
+    doc.text(`Periode: ${namaBulan} ${rekapCache.tahun}   |   Total hari kerja: ${rekapCache.totalHariKerja} hari   |   Dicetak: ${new Date().toLocaleString('id-ID')}`, margin, y);
+    y += 8;
+
+    const colX = [margin, margin+14, margin+62, margin+80, margin+108, margin+126, margin+144, margin+162, margin+180];
+    const headers = ['ID','Nama','Jabatan','Piket','Masuk','Tepat','Telat','Izin','Alpha'];
+    doc.setFont(undefined,'bold');
+    doc.setFontSize(8);
+    headers.forEach((h,i)=> doc.text(h, colX[i], y));
+    doc.setFont(undefined,'normal');
+    y += 2; doc.line(margin, y, 196, y); y += 5;
+
+    list.forEach(r=>{
+      if(y > 285){ doc.addPage(); y = 16; }
+      const row = [String(r.ID), String(r.Nama).slice(0,26), String(r.Jabatan||'').slice(0,11),
+                   String(r.Piket||'Tidak Piket').slice(0,11),
+                   String(r.TotalMasuk), String(r.TotalTepatWaktu), String(r.TotalTelat),
+                   String(r.TotalIzin), String(r.TotalAlpha)];
+      row.forEach((val,i)=> doc.text(val, colX[i], y));
+      y += 6;
+    });
+
+    const namaFile = `Rekap_Bulanan_BPBD_${namaBulan}_${rekapCache.tahun}.pdf`;
+    doc.save(namaFile);
+  }catch(e){
+    showToast('Gagal membuat PDF: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '📄 Export Rekap ke PDF';
+  }
+}
+document.getElementById('btnExportRekapPdf').onclick = exportRekapPDF;
+
+// ---------- Tombol refresh melayang (fitur dari admin_1.html) ----------
+document.getElementById('refreshBtn').addEventListener('click', () => {
+  const btn = document.getElementById('refreshBtn');
+  btn.classList.add('spinning');
+  setTimeout(() => location.reload(), 400);
+});
+</script>
+</body>
+</html>
