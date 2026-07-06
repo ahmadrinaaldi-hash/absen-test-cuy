@@ -151,7 +151,7 @@
       </select>
     </div>
     <button class="btn btn-blue" id="btnExportLogPdf" style="margin:10px 0 4px;" onclick="exportLogPDF()">📄 Export Log Bulanan ke PDF (per karyawan)</button>
-    <div class="hint-kecil" style="margin-bottom:10px;">PDF dibuat per karyawan untuk Bulan &amp; Tahun yang dipilih di atas, dalam bentuk kalender kehadiran (nama hari, tanggal, jam masuk + ketepatan, dan foto per hari) — dijamin muat 1 halaman per karyawan. Pilih Bulan &amp; Tahun dulu sebelum export (filter Ketepatan tidak berlaku untuk PDF ini). Ketik nama/ID di kotak pencarian untuk export 1 karyawan saja; kosongkan untuk export semua karyawan sekaligus (bisa memakan waktu lebih lama karena memuat banyak foto).</div>
+    <div class="hint-kecil" style="margin-bottom:10px;">PDF dibuat per karyawan untuk Bulan &amp; Tahun yang dipilih di atas, dalam bentuk kalender kehadiran (nama hari, tanggal, jam MASUK + ketepatan, jam KELUAR, serta foto masuk &amp; keluar per hari) — dijamin muat 1 halaman per karyawan. Pilih Bulan &amp; Tahun dulu sebelum export (filter Ketepatan tidak berlaku untuk PDF ini). Ketik nama/ID di kotak pencarian untuk export 1 karyawan saja; kosongkan untuk export semua karyawan sekaligus (bisa memakan waktu lebih lama karena memuat banyak foto).</div>
     <div class="table-scroll">
       <table>
         <thead><tr><th>Hari / Tanggal</th><th>ID Pegawai</th><th>Nama Pegawai</th><th>Status</th><th>Ketepatan</th><th>Foto</th><th>Bukti Izin</th><th>Lokasi</th></tr></thead>
@@ -615,11 +615,12 @@ function loadImageAsDataUrl(url){
 }
 
 // -------- Export Log Absensi ke PDF: Kalender Kehadiran Bulanan per Karyawan --------
-// Tampilan meniru kalender kehadiran (nama hari, tanggal, jam masuk +
-// ketepatan atau kode Izin, dilengkapi foto), disusun jadi 3 blok baris per
-// bulan. Tinggi SETIAP bagian grid bersifat TETAP — tidak tergantung banyak/
-// sedikitnya data hari itu — sehingga 1 karyawan DIJAMIN muat dalam TEPAT
-// 1 halaman, untuk bulan apa pun (28-31 hari) & pegawai mana pun.
+// Tampilan kalender kehadiran (nama hari, tanggal, jam MASUK + ketepatan
+// ATAU kode Izin/Alpha di baris atas, jam KELUAR di baris bawah, dilengkapi
+// foto masuk & foto keluar), disusun jadi 3 blok baris per bulan. Tinggi
+// SETIAP bagian grid bersifat TETAP — tidak tergantung banyak/sedikitnya
+// data hari itu — sehingga 1 karyawan DIJAMIN muat dalam TEPAT 1 halaman,
+// untuk bulan apa pun (28-31 hari) & pegawai mana pun.
 function formatJam(d){
   return (!d || isNaN(d)) ? '-' : d.toLocaleTimeString('id-ID', { hour:'2-digit', minute:'2-digit' });
 }
@@ -704,62 +705,75 @@ async function exportLogPDF(){
     const JUMLAH_BLOK = 3;
     const kolomPerBlok = Math.ceil(jumlahHari / JUMLAH_BLOK);
     const colWidth = usableWidth / kolomPerBlok;
-    const photoSize = Math.min(colWidth - 2.5, 19);
+    // Foto dibuat sedikit lebih kecil dari versi sebelumnya karena sekarang
+    // ADA DUA foto bertumpuk per tanggal (foto Masuk & foto Keluar).
+    const photoSize = Math.min(colWidth - 3, 15);
 
     // Tinggi tiap bagian grid TETAP (tidak tergantung isi data pegawai),
     // supaya total tinggi 1 halaman bisa dipastikan muat di kertas A4.
-    const T_LABEL = 6, T_HARI = 5, T_TGL = 5.5, T_STATUS = 5.5;
-    const T_FOTO = photoSize + 2.5;
+    // Baris1 = jam & status MASUK (atau kode Izin/Alpha/'-'), Baris2 = jam KELUAR.
+    const T_LABEL = 6, T_HARI = 5, T_TGL = 5.5, T_BARIS1 = 5.2, T_BARIS2 = 5.2;
+    const T_FOTO1 = photoSize + 2, T_FOTO2 = photoSize + 2;
     const T_CATATAN = 6.5;
-    const T_BLOK = T_LABEL + T_HARI + T_TGL + T_STATUS + T_FOTO + T_CATATAN;
+    const T_BLOK = T_LABEL + T_HARI + T_TGL + T_BARIS1 + T_BARIS2 + T_FOTO1 + T_FOTO2 + T_CATATAN;
+
 
     for (let pegawaiIndex = 0; pegawaiIndex < daftarPegawai.length; pegawaiIndex++) {
       const { id, nama, rows } = daftarPegawai[pegawaiIndex];
       if(pegawaiIndex > 0) doc.addPage();
 
-      // ---- Kumpulkan log milik pegawai ini per tanggal ----
+      // ---- Kumpulkan log milik pegawai ini per tanggal (MASUK & KELUAR sekaligus) ----
       const logPerTanggal = new Map();
       rows.forEach(l=>{
         const d = new Date(l.Timestamp);
         if(isNaN(d)) return;
         const tgl = d.getDate();
-        if(!logPerTanggal.has(tgl)) logPerTanggal.set(tgl, { masuk:null, masukFoto:'', ketepatan:'', izin:[] });
+        if(!logPerTanggal.has(tgl)) logPerTanggal.set(tgl, { masuk:null, masukFoto:'', ketepatan:'', keluar:null, keluarFoto:'', izin:[] });
         const h = logPerTanggal.get(tgl);
         if(l.Status === 'MASUK'){ h.masuk = d; h.ketepatan = l.Ketepatan || ''; h.masukFoto = l.FotoAbsen || ''; }
+        else if(l.Status === 'KELUAR'){ h.keluar = d; h.keluarFoto = l.FotoAbsen || ''; }
         else if(l.Status === 'IZIN'){ h.izin.push(l); }
       });
 
       // ---- Susun 1 sel per tanggal, TERMASUK hari tanpa data (libur/alpha) ----
+      // "Baris1" = jam & status MASUK (atau kode Izin/Alpha/'-' kalau bukan
+      // hari hadir), "Baris2" = jam KELUAR (hanya terisi kalau hari itu hadir
+      // dan sudah ada absen keluar).
       const dataHari = [];
       for(let d = 1; d <= jumlahHari; d++){
         const tanggal = new Date(tahun, bulan-1, d);
         const info = logPerTanggal.get(d);
         const dow = tanggal.getDay(); // 0=Minggu .. 6=Sabtu
         const isWeekend = (dow === 0 || dow === 6);
-        let kode = '-', jenis = 'off', fotoUrl = '', catatan = '';
+        let baris1Kode = '-', baris1Jenis = 'off', baris2Kode = '-';
+        let fotoUtama = '', fotoKedua = '', catatan = '';
         if(info && info.masuk){
-          jenis = info.ketepatan === 'Telat' ? 'telat' : 'tepat';
-          kode = `${formatJam(info.masuk)} - ${singkatanKetepatan(info.ketepatan) || 'TW'}`;
-          fotoUrl = info.masukFoto;
+          baris1Jenis = info.ketepatan === 'Telat' ? 'telat' : 'tepat';
+          baris1Kode = `${formatJam(info.masuk)} ${singkatanKetepatan(info.ketepatan) || 'TW'}`;
+          fotoUtama = info.masukFoto;
+          if(info.keluar){ baris2Kode = formatJam(info.keluar); fotoKedua = info.keluarFoto; }
         } else if(info && info.izin.length){
           const iz = info.izin[0];
           const ki = kodeIzin(iz.Keterangan);
-          kode = ki.kode; jenis = ki.jenis;
-          fotoUrl = iz.FotoBukti || '';
+          baris1Kode = ki.kode; baris1Jenis = ki.jenis;
+          fotoUtama = iz.FotoBukti || '';
           catatan = iz.Keterangan || '';
         } else if(!isWeekend && tanggal <= hariIni){
           // Hari kerja yang sudah lewat tanpa MASUK maupun IZIN = Alpha,
           // sama seperti definisi TotalAlpha di getRekapBulanan (Code.gs).
-          kode = 'A'; jenis = 'alpha';
+          baris1Kode = 'A'; baris1Jenis = 'alpha';
         }
-        dataHari.push({ tanggal, kode, jenis, fotoUrl, catatan });
+        dataHari.push({ tanggal, baris1Kode, baris1Jenis, baris2Kode, fotoUtama, fotoKedua, catatan });
       }
 
-      // ---- Muat semua foto hari ini sekaligus & PARALEL (jauh lebih cepat
-      // daripada memuat satu-satu, penting karena kini bisa sampai ~31 foto
-      // per pegawai, bukan cuma beberapa foto bukti izin seperti sebelumnya) ----
-      const fotoDataUrls = await Promise.all(
-        dataHari.map(h => h.fotoUrl ? loadImageAsDataUrl(h.fotoUrl) : Promise.resolve(null))
+      // ---- Muat semua foto sekaligus & PARALEL (foto Masuk/Izin, lalu foto
+      // Keluar) — jauh lebih cepat daripada satu-satu, penting karena kini
+      // bisa sampai ~62 foto per pegawai (maks 31 hari x 2 foto masuk+keluar) ----
+      const fotoUtamaUrls = await Promise.all(
+        dataHari.map(h => h.fotoUtama ? loadImageAsDataUrl(h.fotoUtama) : Promise.resolve(null))
+      );
+      const fotoKeduaUrls = await Promise.all(
+        dataHari.map(h => h.fotoKedua ? loadImageAsDataUrl(h.fotoKedua) : Promise.resolve(null))
       );
 
       // ---- Header halaman ----
@@ -773,10 +787,20 @@ async function exportLogPDF(){
       doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(110);
       doc.text(`Periode: ${namaBulan} ${tahun}   |   Dicetak: ${new Date().toLocaleString('id-ID')}`, margin, y);
       y += 5;
-      doc.setFontSize(6.8); doc.setTextColor(130);
-      doc.text('Kode: TW = Tepat Waktu, T = Telat, I = Izin, S = Sakit, TL = Tugas Luar / Dinas Luar, A = Alpha (tanpa keterangan)', margin, y);
+      doc.setFontSize(6.6); doc.setTextColor(130);
+      doc.text('Baris atas tiap tanggal = jam & status MASUK, baris bawah = jam KELUAR.', margin, y);
+      y += 3.6;
+      doc.text('Kode: TW=Tepat Waktu, T=Telat, I=Izin, S=Sakit, TL=Tugas Luar/Dinas Luar, A=Alpha, "-"=Libur/Tidak Ada Data', margin, y);
       doc.setTextColor(20);
-      y += 5;
+      y += 4.4;
+      // Legenda kecil warna baris Masuk vs Keluar
+      doc.setFillColor(224,242,225); doc.rect(margin, y, 3, 3, 'F');
+      doc.setFontSize(6.4); doc.setTextColor(90);
+      doc.text('Jam Masuk', margin + 4.2, y + 2.6);
+      doc.setFillColor(219,234,248); doc.rect(margin + 22, y, 3, 3, 'F');
+      doc.text('Jam Keluar', margin + 26.2, y + 2.6);
+      doc.setTextColor(20);
+      y += 5.5;
 
       // ---- Gambar 3 blok kalender ----
       for(let b = 0; b < JUMLAH_BLOK; b++){
@@ -798,7 +822,8 @@ async function exportLogPDF(){
           const d = mulai + k;
           const h = dataHari[d-1];
           const xKol = margin + colWidth*k;
-          const warna = WARNA_STATUS_HARI[h.jenis] || WARNA_STATUS_HARI.off;
+          const warna1 = WARNA_STATUS_HARI[h.baris1Jenis] || WARNA_STATUS_HARI.off;
+          const adaKeluar = h.baris2Kode && h.baris2Kode !== '-';
 
           // Nama hari
           doc.setFillColor(200,230,193);
@@ -812,24 +837,40 @@ async function exportLogPDF(){
           doc.setFontSize(7.5);
           doc.text(String(d).padStart(2,'0'), xKol + colWidth/2, yBlok+T_HARI+T_TGL/2+1.2, { align:'center' });
 
-          // Status / kode hari
-          doc.setFillColor(248,250,252);
-          doc.rect(xKol, yBlok+T_HARI+T_TGL, colWidth, T_STATUS, 'F');
-          doc.setFont('helvetica','bold'); doc.setFontSize(6.3);
-          doc.setTextColor(warna[0],warna[1],warna[2]);
-          doc.text(h.kode, xKol + colWidth/2, yBlok+T_HARI+T_TGL+T_STATUS/2+1, { align:'center' });
+          // Baris 1: jam + status MASUK (atau kode Izin/Alpha/'-')
+          const yBaris1 = yBlok+T_HARI+T_TGL;
+          doc.setFillColor(224,242,225);
+          doc.rect(xKol, yBaris1, colWidth, T_BARIS1, 'F');
+          doc.setFont('helvetica','bold'); doc.setFontSize(6.1);
+          doc.setTextColor(warna1[0],warna1[1],warna1[2]);
+          doc.text(h.baris1Kode, xKol + colWidth/2, yBaris1+T_BARIS1/2+1, { align:'center' });
+
+          // Baris 2: jam KELUAR (kosong/'-' kalau belum absen keluar)
+          const yBaris2 = yBaris1+T_BARIS1;
+          doc.setFillColor(219,234,248);
+          doc.rect(xKol, yBaris2, colWidth, T_BARIS2, 'F');
+          doc.setFont('helvetica','bold'); doc.setFontSize(6.1);
+          if(adaKeluar){ doc.setTextColor(46,90,150); } else { doc.setTextColor(175,180,190); }
+          doc.text(h.baris2Kode, xKol + colWidth/2, yBaris2+T_BARIS2/2+1, { align:'center' });
           doc.setTextColor(20); doc.setFont('helvetica','normal');
 
-          // Foto (foto absen MASUK, atau foto bukti Izin kalau pegawai melampirkannya)
-          const yFoto = yBlok+T_HARI+T_TGL+T_STATUS;
-          const fotoDataUrl = fotoDataUrls[d-1];
-          if(fotoDataUrl){
-            try{ doc.addImage(fotoDataUrl,'JPEG', xKol+(colWidth-photoSize)/2, yFoto+1.2, photoSize, photoSize); }catch(e){}
+          // Foto utama (foto absen MASUK, atau foto bukti Izin)
+          const yFoto1 = yBaris2+T_BARIS2;
+          const fotoUtamaUrl = fotoUtamaUrls[d-1];
+          if(fotoUtamaUrl){
+            try{ doc.addImage(fotoUtamaUrl,'JPEG', xKol+(colWidth-photoSize)/2, yFoto1+1, photoSize, photoSize); }catch(e){}
+          }
+
+          // Foto kedua (foto absen KELUAR, hanya ada kalau hari itu hadir & sudah absen keluar)
+          const yFoto2 = yFoto1+T_FOTO1;
+          const fotoKeduaUrl = fotoKeduaUrls[d-1];
+          if(fotoKeduaUrl){
+            try{ doc.addImage(fotoKeduaUrl,'JPEG', xKol+(colWidth-photoSize)/2, yFoto2+1, photoSize, photoSize); }catch(e){}
           }
 
           // Catatan Izin (maks 2 baris, font sangat kecil, hanya kalau ada)
           if(h.catatan){
-            const yCatatan = yFoto + T_FOTO;
+            const yCatatan = yFoto2 + T_FOTO2;
             doc.setFontSize(5.2); doc.setTextColor(80,100,150);
             const baris = doc.splitTextToSize(h.catatan, colWidth - 1.5).slice(0,2);
             doc.text(baris, xKol + colWidth/2, yCatatan+2.2, { align:'center' });
@@ -847,7 +888,7 @@ async function exportLogPDF(){
         y += T_BLOK + 4;
       }
 
-      // ---- Ringkasan total di bagian bawah (konsisten dgn tab Rekap Bulanan) ----
+      // ---- Ringkasan ringkas 1 baris (konsisten dgn tab Rekap Bulanan, versi disederhanakan) ----
       const rekapPegawai = rekapPerId.get(String(id));
       let totalTepat, totalTelat, totalIzin, totalAlpha;
       if(rekapPegawai){
@@ -855,20 +896,21 @@ async function exportLogPDF(){
         totalIzin = rekapPegawai.TotalIzin; totalAlpha = rekapPegawai.TotalAlpha;
       } else {
         // fallback: hitung manual dari grid kalender kalau pegawai tidak ada di rekap
-        totalTepat = dataHari.filter(h=>h.jenis==='tepat').length;
-        totalTelat = dataHari.filter(h=>h.jenis==='telat').length;
-        totalIzin = dataHari.filter(h=>['sakit','tugasluar','izinlain'].includes(h.jenis)).length;
-        totalAlpha = dataHari.filter(h=>h.jenis==='alpha').length;
+        totalTepat = dataHari.filter(h=>h.baris1Jenis==='tepat').length;
+        totalTelat = dataHari.filter(h=>h.baris1Jenis==='telat').length;
+        totalIzin = dataHari.filter(h=>['sakit','tugasluar','izinlain'].includes(h.baris1Jenis)).length;
+        totalAlpha = dataHari.filter(h=>h.baris1Jenis==='alpha').length;
       }
-      const totalSakit = dataHari.filter(h=>h.jenis==='sakit').length;
-      const totalTugasLuar = dataHari.filter(h=>h.jenis==='tugasluar').length;
+      const hariKerja = rekapData.totalHariKerja || (totalTepat+totalTelat+totalIzin+totalAlpha);
+      const persenHadir = hariKerja ? Math.round((totalTepat+totalTelat)/hariKerja*100) : null;
 
       doc.setDrawColor(225); doc.setFillColor(246,248,251);
-      doc.roundedRect(margin, y, usableWidth, 21, 2, 2, 'FD');
-      doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(20);
-      doc.text(`Tepat Waktu : ${totalTepat}     Terlambat : ${totalTelat}     Izin : ${totalIzin}`, margin + 4, y + 8.5);
-      doc.text(`Sakit : ${totalSakit}     Tugas Luar/Dinas Luar : ${totalTugasLuar}     Alpha : ${totalAlpha}` +
-        (rekapData.totalHariKerja ? `     Hari Kerja : ${rekapData.totalHariKerja}` : ''), margin + 4, y + 15.5);
+      doc.roundedRect(margin, y, usableWidth, 14, 2, 2, 'FD');
+      doc.setFont('helvetica','bold'); doc.setFontSize(7.8); doc.setTextColor(20);
+      let ringkasan = `Tepat Waktu: ${totalTepat}   Telat: ${totalTelat}   Izin/Sakit/Dinas Luar: ${totalIzin}   Alpha: ${totalAlpha}`;
+      if(hariKerja) ringkasan += `   Hari Kerja: ${hariKerja}`;
+      if(persenHadir !== null) ringkasan += `   Kehadiran: ${persenHadir}%`;
+      doc.text(ringkasan, margin + 4, y + 8.5);
       doc.setFont('helvetica','normal');
     }
 
