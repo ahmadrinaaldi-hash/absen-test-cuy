@@ -55,6 +55,30 @@
     0%{transform:rotate(0deg);}
     100%{transform:rotate(360deg);}
   }
+
+  /* ---- Modal Popup: Edit Log Absensi Lengkap ---- */
+  .modal-overlay{
+    position:fixed;inset:0;z-index:10000;display:none;
+    align-items:center;justify-content:center;
+    background:rgba(15,23,42,.55);
+    padding:16px;
+  }
+  .modal-overlay.show{display:flex;}
+  .modal-box{
+    width:100%;max-width:420px;background:#fff;border-radius:16px;
+    padding:22px 20px 20px;text-align:left;
+    box-shadow:0 20px 50px rgba(15,38,71,.25);
+    max-height:90vh;overflow-y:auto;
+  }
+  .modal-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;}
+  .modal-head h3{margin:0;font-size:16px;}
+  .modal-close{
+    background:none;border:none;font-size:20px;line-height:1;cursor:pointer;
+    color:var(--muted);padding:2px 9px;border-radius:8px;
+  }
+  .modal-close:hover{background:#f1f4f9;}
+  .modal-grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .modal-box input:disabled{background:#eef1f5;color:#5b6572;}
 </style>
 </head>
 <body>
@@ -154,7 +178,7 @@
     <div class="hint-kecil" style="margin-bottom:10px;">PDF dibuat per karyawan untuk Bulan &amp; Tahun yang dipilih di atas, dalam bentuk kalender kehadiran (nama hari, tanggal, jam MASUK + ketepatan, jam KELUAR, serta foto masuk &amp; keluar per hari) — dijamin muat 1 halaman per karyawan. Pilih Bulan &amp; Tahun dulu sebelum export (filter Ketepatan tidak berlaku untuk PDF ini). Ketik nama/ID di kotak pencarian untuk export 1 karyawan saja; kosongkan untuk export semua karyawan sekaligus (bisa memakan waktu lebih lama karena memuat banyak foto).</div>
     <div class="table-scroll">
       <table>
-        <thead><tr><th>Hari / Tanggal</th><th>ID Pegawai</th><th>Nama Pegawai</th><th>Status</th><th>Ketepatan</th><th>Foto</th><th>Bukti Izin</th><th>Lokasi</th></tr></thead>
+        <thead><tr><th>Hari / Tanggal</th><th>ID Pegawai</th><th>Nama Pegawai</th><th>Status</th><th>Ketepatan</th><th>Foto</th><th>Bukti Izin</th><th>Lokasi</th><th>Aksi</th></tr></thead>
         <tbody id="bodyLog"></tbody>
       </table>
     </div>
@@ -255,6 +279,46 @@
     <button class="btn btn-blue btn-block" id="btnSimpanJam" style="margin-top:16px;">💾 SIMPAN SEMUA BATAS JAM MASUK</button>
     <div class="status-msg" id="jamStatusMsg" style="text-align:left;"></div>
   </section>
+</div>
+
+<!-- ===================== POPUP: EDIT LOG ABSENSI LENGKAP ===================== -->
+<div class="modal-overlay" id="editLogOverlay">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h3>✏ Edit Log Absensi Lengkap</h3>
+      <button type="button" class="modal-close" id="btnCloseEditLog" aria-label="Tutup">✕</button>
+    </div>
+
+    <label>Nama Pegawai</label>
+    <input type="text" id="elNama" disabled>
+    <input type="hidden" id="elRow">
+
+    <div class="modal-grid2">
+      <div>
+        <label>Tanggal Absen</label>
+        <input type="date" id="elTanggal">
+      </div>
+      <div>
+        <label>Jam Absen</label>
+        <input type="time" id="elJam" step="1">
+      </div>
+    </div>
+
+    <label>Status Absensi</label>
+    <select id="elStatus">
+      <option value="MASUK">Masuk</option>
+      <option value="KELUAR">Keluar</option>
+      <option value="IZIN">Izin</option>
+    </select>
+
+    <label>Keterangan / Alasan Tambahan</label>
+    <input type="text" id="elKeterangan" list="elKeteranganList" placeholder="Contoh: Sakit / Dinas Luar Kota (opsional)">
+    <datalist id="elKeteranganList"></datalist>
+    <div class="hint-kecil">Untuk status Izin, isi alasan di sini (bisa pilih dari daftar Opsi Izin yang sudah ada, atau ketik bebas).</div>
+
+    <button class="btn btn-green btn-block" id="btnSimpanEditLog" style="margin-top:16px;">💾 SIMPAN PERUBAHAN</button>
+    <button type="button" class="btn btn-outline btn-block" id="btnBatalEditLog" style="margin-top:8px;">BATAL</button>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -492,7 +556,7 @@ document.getElementById('btnSavePegawai').onclick = async ()=>{
 // ================= LOG ABSENSI =================
 let logCache = [];
 async function loadLog(){
-  document.getElementById('bodyLog').innerHTML = '<tr><td colspan="8" class="loading">Memuat data...</td></tr>';
+  document.getElementById('bodyLog').innerHTML = '<tr><td colspan="9" class="loading">Memuat data...</td></tr>';
   try{
     const res = await fetch(`${API_URL}?action=getLog`);
     const json = await res.json();
@@ -500,7 +564,7 @@ async function loadLog(){
     isiFilterTanggal();
     renderLog();
   }catch(e){
-    document.getElementById('bodyLog').innerHTML = '<tr><td colspan="8" class="loading">Gagal memuat data. Cek API_URL di config.js</td></tr>';
+    document.getElementById('bodyLog').innerHTML = '<tr><td colspan="9" class="loading">Gagal memuat data. Cek API_URL di config.js</td></tr>';
   }
 }
 function isiFilterTanggal(){
@@ -574,6 +638,7 @@ function renderLog(){
       <td>${l.FotoAbsen? `<a href="${l.FotoAbsen}" target="_blank" class="btn btn-blue">🖼 Lihat</a>`:'-'}</td>
       <td>${l.FotoBukti? `<a href="${l.FotoBukti}" target="_blank" class="btn btn-orange">📎 Lihat</a>`:'-'}</td>
       <td>${mapsUrl? `<a href="${mapsUrl}" target="_blank" class="btn btn-green">🗺 Peta</a>`:'-'}</td>
+      <td>${l._row!=null? `<button class="btn btn-orange" onclick='bukaEditLog(${l._row})'>✏ Edit</button>`:'-'}</td>
     </tr>`;
   }).join('');
 }
@@ -581,6 +646,91 @@ document.getElementById('searchLog').addEventListener('input', renderLog);
 document.getElementById('filterBulan').addEventListener('change', renderLog);
 document.getElementById('filterTahun').addEventListener('change', renderLog);
 document.getElementById('filterKetepatan').addEventListener('change', renderLog);
+
+// ================= POPUP: EDIT LOG ABSENSI LENGKAP =================
+function pad2(n){ return String(n).padStart(2,'0'); }
+
+// Isi datalist "Keterangan / Alasan Tambahan" di popup edit dengan opsi-opsi
+// Izin yang sudah didaftarkan di tab "⚙ LIST OPSI IZIN", supaya admin tinggal
+// pilih tanpa harus mengetik ulang alasan yang sama persis.
+function isiDatalistKeterangan(){
+  const dl = document.getElementById('elKeteranganList');
+  if(!dl) return;
+  dl.innerHTML = (izinCache||[]).map(o=>`<option value="${escapeHtml(o.Teks)}"></option>`).join('');
+}
+
+function bukaEditLog(row){
+  const l = logCache.find(x=>x._row===row);
+  if(!l){ showToast('Data log tidak ditemukan, coba muat ulang tab Log Absensi'); return; }
+  const d = new Date(l.Timestamp);
+  document.getElementById('elRow').value = row;
+  document.getElementById('elNama').value = `${l.Nama} (${l.ID})`;
+  document.getElementById('elTanggal').value = isNaN(d) ? '' : `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+  document.getElementById('elJam').value = isNaN(d) ? '' : `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+  document.getElementById('elStatus').value = ['MASUK','KELUAR','IZIN'].includes(l.Status) ? l.Status : 'IZIN';
+  document.getElementById('elKeterangan').value = l.Keterangan || '';
+  isiDatalistKeterangan();
+  document.getElementById('editLogOverlay').classList.add('show');
+}
+
+function tutupEditLog(){
+  document.getElementById('editLogOverlay').classList.remove('show');
+}
+document.getElementById('btnCloseEditLog').onclick = tutupEditLog;
+document.getElementById('btnBatalEditLog').onclick = tutupEditLog;
+// Klik di area gelap luar kotak popup juga menutup popup, biar lebih praktis.
+document.getElementById('editLogOverlay').addEventListener('click', (e)=>{
+  if(e.target.id === 'editLogOverlay') tutupEditLog();
+});
+document.addEventListener('keydown', (e)=>{
+  if(e.key === 'Escape' && document.getElementById('editLogOverlay').classList.contains('show')) tutupEditLog();
+});
+
+document.getElementById('btnSimpanEditLog').onclick = async () => {
+  const row = document.getElementById('elRow').value;
+  const tanggal = document.getElementById('elTanggal').value;
+  let jam = document.getElementById('elJam').value;
+  const status = document.getElementById('elStatus').value;
+  const keterangan = document.getElementById('elKeterangan').value.trim();
+
+  if(!row){ showToast('Baris log tidak valid'); return; }
+  if(!tanggal || !jam){ showToast('Tanggal dan jam absen wajib diisi'); return; }
+  if(jam.length === 5) jam += ':00'; // beberapa browser hanya kirim JJ:MM tanpa detik
+
+  const tanggalJam = new Date(`${tanggal}T${jam}`);
+  if(isNaN(tanggalJam)){ showToast('Format tanggal/jam tidak valid'); return; }
+
+  // NOTE: aksi 'updateLog' ini perlu ditangani juga di backend (Code.gs) —
+  // cari/tambahkan handler serupa 'updatePegawai'/'updateOpsiIzin' yang
+  // menerima {row, timestamp, status, keterangan} lalu menimpa baris terkait
+  // di sheet Log Absensi.
+  const payload = {
+    action: 'updateLog',
+    row: Number(row),
+    timestamp: tanggalJam.toISOString(),
+    status,
+    keterangan
+  };
+
+  const btn = document.getElementById('btnSimpanEditLog');
+  const teksAsli = btn.textContent;
+  btn.disabled = true; btn.textContent = '⏳ Menyimpan...';
+  try{
+    const res = await fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body: JSON.stringify(payload)});
+    const json = await res.json();
+    if(json.ok){
+      showToast('Log absensi diperbarui');
+      tutupEditLog();
+      loadLog();
+    } else {
+      showToast('Gagal: ' + (json.error || 'terjadi kesalahan'));
+    }
+  }catch(e){
+    showToast('Gagal menghubungi server');
+  } finally {
+    btn.disabled = false; btn.textContent = teksAsli;
+  }
+};
 
 // -------- Helper: ubah link Google Drive jadi link gambar yang bisa dibaca <canvas> --------
 function extractDriveFileId(url){
@@ -930,6 +1080,7 @@ async function loadIzin(){
     const json = await res.json();
     izinCache = json.data || [];
     renderIzin();
+    isiDatalistKeterangan();
   }catch(e){
     document.getElementById('bodyIzin').innerHTML = '<tr><td colspan="3" class="loading">Gagal memuat data. Cek API_URL di config.js</td></tr>';
   }
